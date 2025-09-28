@@ -1,0 +1,41 @@
+# Airflow specific
+logs/
+__pycache__/
+*.pyc
+*.pyo
+airflow.db
+airflow.cfg.backup*
+unittests.cfg
+airflow_login_attempts.db
+standalone_admin_password.txt
+
+# Docker & Environment
+.env.local
+.venv/
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Database
+*.db
+*.sqlite
+
+# Python
+*.egg-info/
+dist/
+build/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Sensitive files (اما .env نگه می‌داریم چون نیاز داریم)
+# .env
+
+# Docker volumes
+postgres-db-volume/
