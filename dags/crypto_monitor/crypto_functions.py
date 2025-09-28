@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import logging
-from airflow.hooks.postgres_hook import PostgresHook
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 
 # Import configuration
