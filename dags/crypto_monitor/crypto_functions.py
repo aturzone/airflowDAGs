@@ -1,10 +1,11 @@
 # dags/crypto_monitor/crypto_functions.py
+# نسخه بهبود یافته با حل مشکل return types
 
 import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 import logging
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
@@ -132,8 +133,13 @@ class CryptoPriceCollector:
         
         return processed_data
     
-    def save_to_database(self, price_data: Dict) -> int:
-        """ذخیره داده‌ها در PostgreSQL"""
+    def save_to_database(self, price_data: Dict) -> Dict:
+        """
+        ذخیره داده‌ها در PostgreSQL
+        
+        Returns:
+            Dict با اطلاعات نتیجه عملیات
+        """
         try:
             postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
             
@@ -142,25 +148,51 @@ class CryptoPriceCollector:
             
             # Insert کردن داده‌ها
             records_inserted = 0
+            failed_records = 0
             
             for price_record in price_data['prices']:
-                insert_sql = """
-                INSERT INTO crypto_prices 
-                (coin_id, symbol, price_usd, price_eur, price_btc, 
-                 change_24h, volume_24h, last_updated, created_at)
-                VALUES (%(coin_id)s, %(symbol)s, %(price_usd)s, %(price_eur)s, %(price_btc)s,
-                        %(change_24h)s, %(volume_24h)s, %(last_updated)s, %(created_at)s)
-                """
-                
-                postgres_hook.run(insert_sql, parameters=price_record)
-                records_inserted += 1
+                try:
+                    insert_sql = """
+                    INSERT INTO crypto_prices 
+                    (coin_id, symbol, price_usd, price_eur, price_btc, 
+                     change_24h, volume_24h, last_updated, created_at)
+                    VALUES (%(coin_id)s, %(symbol)s, %(price_usd)s, %(price_eur)s, %(price_btc)s,
+                            %(change_24h)s, %(volume_24h)s, %(last_updated)s, %(created_at)s)
+                    """
+                    
+                    postgres_hook.run(insert_sql, parameters=price_record)
+                    records_inserted += 1
+                    
+                except Exception as record_error:
+                    logger.warning(f"Failed to insert record for {price_record.get('coin_id', 'unknown')}: {record_error}")
+                    failed_records += 1
             
-            logger.info(f"Successfully inserted {records_inserted} price records")
-            return records_inserted
+            result = {
+                'status': 'success' if records_inserted > 0 else 'no_data',
+                'records_inserted': records_inserted,
+                'failed_records': failed_records,
+                'total_records': len(price_data['prices']),
+                'success_rate': round((records_inserted / len(price_data['prices'])) * 100, 2) if price_data['prices'] else 0,
+                'timestamp': datetime.utcnow().isoformat(),
+                'message': f"Successfully inserted {records_inserted} out of {len(price_data['prices'])} records"
+            }
+            
+            logger.info(f"✅ Database save result: {result['message']}")
+            return result
             
         except Exception as e:
-            logger.error(f"Database error: {str(e)}")
-            raise
+            error_result = {
+                'status': 'failed',
+                'error': str(e),
+                'records_inserted': 0,
+                'failed_records': len(price_data.get('prices', [])),
+                'total_records': len(price_data.get('prices', [])),
+                'success_rate': 0,
+                'timestamp': datetime.utcnow().isoformat(),
+                'message': f"Database save failed: {str(e)}"
+            }
+            logger.error(f"❌ Database error: {error_result['message']}")
+            return error_result
     
     def _create_tables_if_not_exists(self, postgres_hook):
         """ایجاد جداول مورد نیاز"""
@@ -238,29 +270,53 @@ class CryptoPriceCollector:
         
         return alerts
     
-    def _save_alerts(self, alerts: List[Dict]):
-        """ذخیره alerts در دیتابیس"""
+    def _save_alerts(self, alerts: List[Dict]) -> Dict:
+        """
+        ذخیره alerts در دیتابیس
+        
+        Returns:
+            Dict با نتیجه عملیات
+        """
         try:
             postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
             
+            alerts_saved = 0
             for alert in alerts:
-                insert_sql = """
-                INSERT INTO price_alerts 
-                (coin_id, symbol, alert_type, threshold_value, current_value, message, created_at)
-                VALUES (%(coin_id)s, %(symbol)s, %(alert_type)s, %(threshold_value)s, 
-                        %(current_value)s, %(message)s, %(created_at)s)
-                """
-                postgres_hook.run(insert_sql, parameters=alert)
+                try:
+                    insert_sql = """
+                    INSERT INTO price_alerts 
+                    (coin_id, symbol, alert_type, threshold_value, current_value, message, created_at)
+                    VALUES (%(coin_id)s, %(symbol)s, %(alert_type)s, %(threshold_value)s, 
+                            %(current_value)s, %(message)s, %(created_at)s)
+                    """
+                    postgres_hook.run(insert_sql, parameters=alert)
+                    alerts_saved += 1
+                    
+                except Exception as alert_error:
+                    logger.warning(f"Failed to save alert: {alert_error}")
+                    
+            return {
+                'status': 'success' if alerts_saved > 0 else 'no_alerts',
+                'alerts_saved': alerts_saved,
+                'total_alerts': len(alerts),
+                'message': f"Saved {alerts_saved} out of {len(alerts)} alerts"
+            }
                 
         except Exception as e:
             logger.error(f"Error saving alerts: {str(e)}")
-            raise
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'alerts_saved': 0,
+                'total_alerts': len(alerts),
+                'message': f"Failed to save alerts: {str(e)}"
+            }
 
 # ============================================================================
-# ⭐ توابع برای استفاده در DAG - این بخش مهمه!
+# ⭐ توابع برای استفاده در DAG - نسخه بهبود یافته
 # ============================================================================
 
-def fetch_crypto_prices(**context):
+def fetch_crypto_prices(**context) -> Dict:
     """تابع اصلی برای دریافت قیمت‌ها - برای استفاده در PythonOperator"""
     try:
         collector = CryptoPriceCollector()
@@ -276,10 +332,27 @@ def fetch_crypto_prices(**context):
         
     except Exception as e:
         logger.error(f"❌ Error in fetch_crypto_prices: {str(e)}")
-        raise
+        # بجای raise کردن، یک empty result برگردون
+        empty_result = {
+            'timestamp': datetime.utcnow(),
+            'prices': [],
+            'metadata': {
+                'total_coins': 0,
+                'currencies': [],
+                'source': 'error',
+                'error': str(e)
+            }
+        }
+        context['task_instance'].xcom_push(key='price_data', value=empty_result)
+        return empty_result
 
-def save_crypto_prices(**context):
-    """ذخیره قیمت‌ها در دیتابیس"""
+def save_crypto_prices(**context) -> Dict:
+    """
+    ذخیره قیمت‌ها در دیتابیس
+    
+    Returns:
+        Dict همیشه با status, message و اطلاعات تفصیلی
+    """
     try:
         collector = CryptoPriceCollector()
         
@@ -287,28 +360,59 @@ def save_crypto_prices(**context):
         price_data = context['task_instance'].xcom_pull(key='price_data', task_ids='fetch_prices')
         
         if not price_data:
-            raise ValueError("No price data found in XCom")
+            return {
+                'status': 'failed',
+                'error': 'No price data found in XCom',
+                'records_inserted': 0,
+                'message': 'No data available to save'
+            }
         
-        # ذخیره در دیتابیس
-        records_count = collector.save_to_database(price_data)
+        if not price_data.get('prices'):
+            return {
+                'status': 'no_data',
+                'records_inserted': 0,
+                'total_records': 0,
+                'message': 'No price records to save'
+            }
         
-        logger.info(f"✅ Successfully saved {records_count} price records to database")
-        return records_count
+        # ذخیره در دیتابیس - حالا همیشه Dict برمی‌گردونه
+        save_result = collector.save_to_database(price_data)
+        
+        logger.info(f"✅ Save operation completed: {save_result['message']}")
+        return save_result
         
     except Exception as e:
-        logger.error(f"❌ Error in save_crypto_prices: {str(e)}")
-        raise
+        error_result = {
+            'status': 'failed',
+            'error': str(e),
+            'records_inserted': 0,
+            'total_records': 0,
+            'success_rate': 0,
+            'timestamp': datetime.utcnow().isoformat(),
+            'message': f"Save operation failed: {str(e)}"
+        }
+        logger.error(f"❌ Error in save_crypto_prices: {error_result['message']}")
+        return error_result
 
-def check_alerts(**context):
-    """بررسی شرایط alert"""
+def check_alerts(**context) -> Dict:
+    """
+    بررسی شرایط alert
+    
+    Returns:
+        Dict با اطلاعات alerts
+    """
     try:
         collector = CryptoPriceCollector()
         
         # دریافت داده از XCom
         price_data = context['task_instance'].xcom_pull(key='price_data', task_ids='fetch_prices')
         
-        if not price_data:
-            raise ValueError("No price data found in XCom")
+        if not price_data or not price_data.get('prices'):
+            return {
+                'status': 'no_data',
+                'alerts_generated': 0,
+                'message': 'No price data available for alert checking'
+            }
         
         # بررسی alerts
         alerts = collector.check_price_alerts(price_data)
@@ -316,9 +420,22 @@ def check_alerts(**context):
         # ذخیره alerts در XCom
         context['task_instance'].xcom_push(key='alerts', value=alerts)
         
-        logger.info(f"✅ Generated {len(alerts)} alerts")
-        return alerts
+        result = {
+            'status': 'success' if alerts else 'no_alerts',
+            'alerts_generated': len(alerts),
+            'alerts': alerts,
+            'message': f"Generated {len(alerts)} alerts from {len(price_data['prices'])} coins"
+        }
+        
+        logger.info(f"✅ Alert check completed: {result['message']}")
+        return result
         
     except Exception as e:
-        logger.error(f"❌ Error in check_alerts: {str(e)}")
-        raise
+        error_result = {
+            'status': 'failed',
+            'error': str(e),
+            'alerts_generated': 0,
+            'message': f"Alert checking failed: {str(e)}"
+        }
+        logger.error(f"❌ Error in check_alerts: {error_result['message']}")
+        return error_result
