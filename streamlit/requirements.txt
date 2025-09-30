@@ -1,0 +1,18 @@
+# streamlit/requirements.txt
+# Core
+streamlit
+pandas
+numpy
+
+# Visualization
+plotly
+altair
+
+# API & Database
+requests
+psycopg2-binary
+sqlalchemy
+
+# Utilities
+python-dateutil
+pytz

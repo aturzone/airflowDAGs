@@ -1,4 +1,4 @@
-# docker-compose.yml - نسخه بهینه با پورت‌های آزاد
+# docker-compose.yml - نسخه کامل با Streamlit Dashboard
 version: '3.8'
 
 x-airflow-common: &airflow-common
@@ -11,7 +11,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__FERNET_KEY: ${FERNET_KEY}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
     AIRFLOW__WEBSERVER__SECRET_KEY: ${WEBSERVER_SECRET_KEY}
@@ -32,7 +32,9 @@ x-airflow-common: &airflow-common
       condition: service_healthy
 
 services:
-  # PostgreSQL Database - پورت 5433 برای جلوگیری از conflict
+  # ================================================================
+  # PostgreSQL Database
+  # ================================================================
   postgres:
     image: postgres:15
     environment:
@@ -43,7 +45,7 @@ services:
     volumes:
       - postgres_db_volume:/var/lib/postgresql/data
     ports:
-      - "5433:5432" # ✅ تغییر از 5432 به 5433
+      - "5433:5432"
     healthcheck:
       test: [ "CMD", "pg_isready", "-U", "airflow" ]
       interval: 10s
@@ -56,12 +58,16 @@ services:
           memory: 512M
         reservations:
           memory: 256M
+    networks:
+      - airflow_network
 
-  # Redis - پورت 6380 برای جلوگیری از conflict
+  # ================================================================
+  # Redis Cache
+  # ================================================================
   redis:
     image: redis:7.2-alpine
     ports:
-      - "6380:6379" # ✅ expose کردن برای دسترسی خارجی
+      - "6380:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
@@ -73,13 +79,17 @@ services:
       resources:
         limits:
           memory: 128M
+    networks:
+      - airflow_network
 
-  # Airflow Webserver - پورت 9090 🚀
+  # ================================================================
+  # Airflow Webserver
+  # ================================================================
   airflow-webserver:
     <<: *airflow-common
     command: webserver
     ports:
-      - "9090:8080" # ✅ تغییر از 8080 به 9090 
+      - "9090:8080"
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
       interval: 30s
@@ -97,8 +107,12 @@ services:
           memory: 1G
         reservations:
           memory: 512M
+    networks:
+      - airflow_network
 
+  # ================================================================
   # Airflow Scheduler
+  # ================================================================
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
@@ -119,8 +133,12 @@ services:
           memory: 1G
         reservations:
           memory: 512M
+    networks:
+      - airflow_network
 
+  # ================================================================
   # Airflow Worker
+  # ================================================================
   airflow-worker:
     <<: *airflow-common
     command: celery worker
@@ -146,8 +164,12 @@ services:
           memory: 2G
         reservations:
           memory: 1G
+    networks:
+      - airflow_network
 
+  # ================================================================
   # Airflow Triggerer
+  # ================================================================
   airflow-triggerer:
     <<: *airflow-common
     command: triggerer
@@ -162,8 +184,12 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_network
 
+  # ================================================================
   # Airflow Init
+  # ================================================================
   airflow-init:
     <<: *airflow-common
     entrypoint: /bin/bash
@@ -182,39 +208,6 @@ services:
           echo "The minimum Airflow version supported: $${min_airflow_version}. Only use this or higher!"
           exit 1
         fi
-        if [[ -z "${AIRFLOW_UID}" ]]; then
-          echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
-          echo "If you are on Linux, you SHOULD follow the instructions below to set "
-          echo "AIRFLOW_UID environment variable, otherwise files will be owned by root."
-          echo "For other operating systems you can get rid of the warning with manually created .env file:"
-          echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
-        fi
-        one_meg=1048576
-        mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
-        cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
-        disk_available=$$(df / | tail -1 | awk '{print $$4}')
-        warning_resources="false"
-        if (( mem_available < 4000 )) ; then
-          echo -e "\033[1;33mWARNING!!!: Not enough memory available for Docker.\e[0m"
-          echo "At least 4GB of memory required. You have $$(numfmt --to iec $$((mem_available * one_meg)))"
-          warning_resources="true"
-        fi
-        if (( cpus_available < 2 )); then
-          echo -e "\033[1;33mWARNING!!!: Not enough CPUS available for Docker.\e[0m"
-          echo "At least 2 CPUs recommended. You have $${cpus_available}"
-          warning_resources="true"
-        fi
-        if (( disk_available < one_meg * 10 )); then
-          echo -e "\033[1;33mWARNING!!!: Not enough Disk space available for Docker.\e[0m"
-          echo "At least 10 GBs recommended. You have $$(numfmt --to iec $$((disk_available * 1024 )))"
-          warning_resources="true"
-        fi
-        if [[ $${warning_resources} == "true" ]]; then
-          echo
-          echo -e "\033[1;33mWARNING!!!: You have not enough resources to run Airflow (see above)!\e[0m"
-          echo "Please follow the instructions to increase amount of resources available:"
-          echo "   https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#before-you-begin"
-        fi
         mkdir -p /sources/logs /sources/dags /sources/plugins
         chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins}
         exec /entrypoint airflow version
@@ -222,21 +215,65 @@ services:
       <<: *airflow-common-env
       _AIRFLOW_DB_UPGRADE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
+    networks:
+      - airflow_network
 
-  # Flower - Celery monitoring (پورت 5556)
+  # ================================================================
+  # 🎨 STREAMLIT DASHBOARD (NEW!)
+  # ================================================================
+  streamlit-dashboard:
+    build:
+      context: ./streamlit
+      dockerfile: Dockerfile
+    container_name: crypto_streamlit_dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - AIRFLOW_BASE_URL=http://airflow-webserver:8080
+      - AIRFLOW_USERNAME=${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      - AIRFLOW_PASSWORD=${_AIRFLOW_WWW_USER_PASSWORD}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=airflow
+      - DB_USER=airflow
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/streamlit:/app
+    depends_on:
+      - postgres
+      - airflow-webserver
+    restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8501/_stcore/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - airflow_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ================================================================
+  # Flower - Celery Monitoring (Optional)
+  # ================================================================
   flower:
     <<: *airflow-common
     command: celery flower
     profiles:
       - flower
     ports:
-      - "5556:5555" # ✅ تغییر از 5555 به 5556
+      - "5556:5555"
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:5555/" ]
       interval: 30s
@@ -248,11 +285,14 @@ services:
       <<: *airflow-common-depends-on
       airflow-init:
         condition: service_completed_successfully
+    networks:
+      - airflow_network
 
 volumes:
   postgres_db_volume:
 
 
 networks:
-  default:
+  airflow_network:
+    driver: bridge
     name: airflow_network
