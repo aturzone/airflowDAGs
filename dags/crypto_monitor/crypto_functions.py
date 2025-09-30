@@ -1,5 +1,5 @@
 # dags/crypto_monitor/crypto_functions.py
-# COMPLETE FIXED VERSION - Replace entire file
+# FIXED VERSION - با استفاده از connection string مستقیم
 
 import requests
 import pandas as pd
@@ -7,8 +7,9 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 import logging
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.models import Variable
+import psycopg2
+from psycopg2 import pool
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,12 @@ class CryptoAPIConfig:
     API_TIMEOUT = 30
     PRICE_CHANGE_THRESHOLD = 5.0
     
+    # Database connection - مستقیم از environment
+    DB_CONNECTION = os.getenv(
+        'DATABASE_URL',
+        'postgresql://airflow:EKQH9jQX7gAfV7pLwVmsbLbF3XfY6n4S@postgres:5432/airflow'
+    )
+    
     @classmethod
     def get_api_endpoints(cls) -> Dict[str, str]:
         return {
@@ -50,6 +57,16 @@ class CryptoPriceCollector:
         self.config = CryptoAPIConfig()
         self.session = requests.Session()
         self.session.timeout = self.config.API_TIMEOUT
+        self._db_pool = None
+    
+    def get_db_connection(self):
+        """Get database connection - مستقیم بدون نیاز به Airflow Hook"""
+        try:
+            conn = psycopg2.connect(self.config.DB_CONNECTION)
+            return conn
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            raise
     
     def fetch_current_prices(self, coins: List[str] = None, vs_currencies: List[str] = None) -> Dict:
         """Fetch current crypto prices from CoinGecko"""
@@ -114,12 +131,16 @@ class CryptoPriceCollector:
         return processed_data
     
     def save_to_database(self, price_data: Dict) -> Dict:
-        """Save data to PostgreSQL"""
+        """Save data to PostgreSQL - با connection مستقیم"""
+        conn = None
         try:
-            postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
+            # دریافت connection
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
             
             logger.info("Creating/verifying database tables...")
-            self._create_tables_if_not_exists(postgres_hook)
+            self._create_tables_if_not_exists(cursor)
+            conn.commit()
             
             records_inserted = 0
             failed_records = 0
@@ -130,11 +151,21 @@ class CryptoPriceCollector:
                     INSERT INTO crypto_prices 
                     (coin_id, symbol, price_usd, price_eur, price_btc, 
                      change_24h, volume_24h, last_updated, created_at)
-                    VALUES (%(coin_id)s, %(symbol)s, %(price_usd)s, %(price_eur)s, %(price_btc)s,
-                            %(change_24h)s, %(volume_24h)s, %(last_updated)s, %(created_at)s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """
                     
-                    postgres_hook.run(insert_sql, parameters=price_record)
+                    cursor.execute(insert_sql, (
+                        price_record['coin_id'],
+                        price_record['symbol'],
+                        price_record['price_usd'],
+                        price_record['price_eur'],
+                        price_record['price_btc'],
+                        price_record['change_24h'],
+                        price_record['volume_24h'],
+                        price_record['last_updated'],
+                        price_record['created_at']
+                    ))
+                    
                     records_inserted += 1
                     logger.info(f"Inserted: {price_record['symbol']} - ${price_record['price_usd']:.2f}")
                     
@@ -142,7 +173,9 @@ class CryptoPriceCollector:
                     logger.warning(f"Failed to insert {price_record.get('coin_id')}: {record_error}")
                     failed_records += 1
             
-            return {
+            conn.commit()
+            
+            result = {
                 'status': 'success' if records_inserted > 0 else 'no_data',
                 'records_inserted': records_inserted,
                 'failed_records': failed_records,
@@ -150,16 +183,23 @@ class CryptoPriceCollector:
                 'message': f"Successfully inserted {records_inserted} out of {len(price_data['prices'])} records"
             }
             
+            return result
+            
         except Exception as e:
             logger.error(f"Database error: {str(e)}")
+            if conn:
+                conn.rollback()
             return {
                 'status': 'failed',
                 'error': str(e),
                 'records_inserted': 0,
                 'message': f"Database save failed: {str(e)}"
             }
+        finally:
+            if conn:
+                conn.close()
     
-    def _create_tables_if_not_exists(self, postgres_hook):
+    def _create_tables_if_not_exists(self, cursor):
         """Create required tables"""
         
         create_prices_table = """
@@ -198,17 +238,39 @@ class CryptoPriceCollector:
         """
         
         try:
-            postgres_hook.run(create_prices_table)
-            postgres_hook.run(create_indexes) 
-            postgres_hook.run(create_alerts_table)
+            cursor.execute(create_prices_table)
+            cursor.execute(create_indexes) 
+            cursor.execute(create_alerts_table)
             logger.info("Database tables verified/created")
         except Exception as e:
             logger.error(f"Error creating tables: {str(e)}")
             raise
 
 # ============================================================================
-# DAG FUNCTIONS - FIXED FOR XCOM SERIALIZATION
+# DAG FUNCTIONS
 # ============================================================================
+
+def test_database_connection(**context):
+    """Test database connection - با psycopg2 مستقیم"""
+    try:
+        import psycopg2
+        conn_string = os.getenv(
+            'DATABASE_URL',
+            'postgresql://airflow:EKQH9jQX7gAfV7pLwVmsbLbF3XfY6n4S@postgres:5432/airflow'
+        )
+        
+        conn = psycopg2.connect(conn_string)
+        cursor = conn.cursor()
+        cursor.execute("SELECT version();")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        logger.info(f"Database connection successful: {result[0]}")
+        return {"status": "success", "db_version": result[0] if result else "unknown"}
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        return {"status": "failed", "error": str(e)}
 
 def fetch_crypto_prices(**context) -> Dict:
     """Fetch prices and prepare for XCom (JSON-serializable)"""

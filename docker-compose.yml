@@ -4,6 +4,7 @@ version: '3.8'
 x-airflow-common: &airflow-common
   image: apache/airflow:2.9.0
   environment: &airflow-common-env
+    DATABASE_URL: postgresql://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow

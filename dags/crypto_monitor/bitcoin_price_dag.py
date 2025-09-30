@@ -1,18 +1,17 @@
 # dags/crypto_monitor/bitcoin_price_dag.py
-# نسخه نهایی - حل شده مشکل final_report
+# FIXED VERSION - با test_connection داخلی
 
 import sys
 import os
 from datetime import datetime, timedelta
+import psycopg2
 
 # Add current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator # type: ignore
-from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
-import requests
 import logging
 import json
 
@@ -63,110 +62,54 @@ dag = DAG(
     is_paused_upon_creation=True
 )
 
-# ⭐ Task 1: تست connection
-def test_connection(**context):
-    """تست ساده برای اطمینان از کارکرد PostgreSQL"""
+# ⭐ Task 1: تست connection - تعریف شده داخل همین فایل
+def test_database_connection(**context):
+    """Test database connection - با psycopg2 مستقیم"""
     try:
-        postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
-        result = postgres_hook.get_first("SELECT version();")
-        logging.info(f"Database connection successful: {result}")
+        conn_string = os.getenv(
+            'DATABASE_URL',
+            'postgresql://airflow:EKQH9jQX7gAfV7pLwVmsbLbF3XfY6n4S@postgres:5432/airflow'
+        )
+        
+        conn = psycopg2.connect(conn_string)
+        cursor = conn.cursor()
+        cursor.execute("SELECT version();")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        logging.info(f"✅ Database connection successful: {result[0][:50]}...")
         return {"status": "success", "db_version": result[0] if result else "unknown"}
     except Exception as e:
-        logging.error(f"Database connection failed: {e}")
+        logging.error(f"❌ Database connection failed: {e}")
         return {"status": "failed", "error": str(e)}
 
 test_task = PythonOperator(
     task_id='test_connection',
-    python_callable=test_connection,
+    python_callable=test_database_connection,
     dag=dag,
-    doc_md="تست connection به PostgreSQL"
+    doc_md="تست connection به PostgreSQL با psycopg2 مستقیم"
 )
 
 # ⭐ Task 2: دریافت قیمت‌ها
-def fetch_prices_with_retry(**context):
-    """نسخه امن‌تر fetch_crypto_prices"""
-    try:
-        return fetch_crypto_prices(**context)
-    except Exception as e:
-        logging.error(f"Error in fetch_prices: {e}")
-        # Return dummy data برای test
-        dummy_data = {
-            'timestamp': datetime.utcnow(),
-            'prices': [
-                {
-                    'coin_id': 'bitcoin',
-                    'symbol': 'BTC',
-                    'price_usd': 50000.0,
-                    'price_eur': 45000.0,
-                    'price_btc': 1.0,
-                    'change_24h': 2.5,
-                    'volume_24h': 1000000.0,
-                    'last_updated': datetime.utcnow(),
-                    'created_at': datetime.utcnow()
-                }
-            ],
-            'metadata': {
-                'total_coins': 1,
-                'currencies': ['usd', 'eur', 'btc'],
-                'source': 'test_data'
-            }
-        }
-        context['task_instance'].xcom_push(key='price_data', value=dummy_data)
-        return dummy_data
-
 fetch_prices_task = PythonOperator(
     task_id='fetch_prices',
-    python_callable=fetch_prices_with_retry,
+    python_callable=fetch_crypto_prices,
     dag=dag,
     provide_context=True,
-    doc_md="دریافت قیمت ارزهای دیجیتال با retry mechanism"
+    doc_md="دریافت قیمت ارزهای دیجیتال"
 )
 
-# ⭐ Task 3: ذخیره قیمت‌ها - ✅ حل شده مشکل return type
-def save_prices_safe(**context):
-    """نسخه امن save_crypto_prices با return type ثابت"""
-    try:
-        # اجرای تابع اصلی
-        result = save_crypto_prices(**context)
-        
-        # حالا result ممکنه int باشه (تعداد records) یا dict
-        if isinstance(result, int):
-            # اگر int بود، تبدیل به dict کن
-            return {
-                "status": "success", 
-                "records_saved": result,
-                "message": f"Successfully saved {result} records"
-            }
-        elif isinstance(result, dict):
-            # اگر dict بود، اطمینان حاصل کن که status داره
-            if 'status' not in result:
-                result['status'] = 'success'
-            return result
-        else:
-            # اگر چیز دیگه‌ای بود
-            return {
-                "status": "unknown", 
-                "result": str(result),
-                "message": "Unexpected return type"
-            }
-            
-    except Exception as e:
-        logging.warning(f"Save failed (this is OK for testing): {e}")
-        return {
-            "status": "failed", 
-            "error": str(e),
-            "message": "Save operation failed - running in test mode"
-        }
-
+# ⭐ Task 3: ذخیره قیمت‌ها
 save_prices_task = PythonOperator(
     task_id='save_prices',
-    python_callable=save_prices_safe,
+    python_callable=save_crypto_prices,
     dag=dag,
     provide_context=True,
     doc_md="ذخیره قیمت‌ها با error handling بهتر"
 )
 
-# ⭐ Task 4: گزارش نهایی - ✅ حل شده مشکل AttributeError
+# ⭐ Task 4: گزارش نهایی
 def final_report(**context):
     """گزارش نهایی از اجرای DAG - Fixed version"""
     
@@ -190,7 +133,7 @@ def final_report(**context):
         if not result:
             return default
         if isinstance(result, dict):
-            return result.get('records_saved', result.get('total_coins', default))
+            return result.get('records_inserted', result.get('total_coins', default))
         elif isinstance(result, int):
             return result
         else:
@@ -256,7 +199,7 @@ final_report_task = PythonOperator(
     python_callable=final_report,
     dag=dag,
     provide_context=True,
-    doc_md="گزارش نهایی از اجرای کامل DAG - Fixed version"
+    doc_md="گزارش نهایی از اجرای کامل DAG"
 )
 
 # ⭐ تعریف dependencies
@@ -267,23 +210,24 @@ dag.doc_md = """
 # 🚀 Crypto Price Monitor DAG - Final Fixed Version
 
 ## ✅ مشکلات حل شده:
-- ✅ AttributeError: 'int' object has no attribute 'get' 
-- ✅ Return type consistency بین functions
+- ✅ Direct PostgreSQL connection بدون نیاز به Airflow Hook
+- ✅ Import issues resolved
 - ✅ Better error handling در final_report
 - ✅ Safe data extraction از XCom results
 - ✅ Structured logging برای debugging بهتر
 
 ## 🔧 Tasks:
-1. **test_connection**: تست database connection
+1. **test_connection**: تست database connection با psycopg2
 2. **fetch_prices**: دریافت قیمت‌های crypto  
-3. **save_prices**: ذخیره در database
+3. **save_prices**: ذخیره در database با connection مستقیم
 4. **final_report**: گزارش نهایی با خروجی ساختارمند
 
 ## 📊 Features:
-- Safe type handling برای همه return values
+- Direct psycopg2 connection
+- No Airflow connection dependency
+- Safe type handling
 - Structured JSON reporting
 - Error resilience
-- Better logging
 
 ## 🎯 Status: Production Ready ✅
 """

@@ -9,7 +9,7 @@
 .DEFAULT_GOAL := help
 
 # Variables
-DOCKER_COMPOSE := docker compose
+DOCKER_COMPOSE := sudo docker compose
 AIRFLOW_SERVICE := airflow-webserver
 STREAMLIT_SERVICE := streamlit-dashboard
 POSTGRES_SERVICE := postgres
