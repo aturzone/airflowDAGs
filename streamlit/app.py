@@ -87,11 +87,32 @@ def get_xcom_value(dag_run_id: str, task_id: str, key: str = "return_value") -> 
     except Exception as e:
         return None
 
+
 @st.cache_data(ttl=60)
 def get_crypto_prices_from_db(limit: int = 100) -> pd.DataFrame:
-    """Get crypto prices from PostgreSQL"""
+    """Get crypto prices from PostgreSQL - FIXED VERSION"""
     try:
         conn = psycopg2.connect(**DB_CONFIG)
+        
+        # First check if table exists
+        check_table_query = """
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'crypto_prices'
+        );
+        """
+        
+        cursor = conn.cursor()
+        cursor.execute(check_table_query)
+        table_exists = cursor.fetchone()[0]
+        cursor.close()
+        
+        if not table_exists:
+            conn.close()
+            st.warning("⚠️ Database table 'crypto_prices' doesn't exist yet. Waiting for first DAG run to complete...")
+            return pd.DataFrame()
+        
+        # Table exists, fetch data
         query = f"""
         SELECT 
             coin_id,
@@ -107,16 +128,42 @@ def get_crypto_prices_from_db(limit: int = 100) -> pd.DataFrame:
         """
         df = pd.read_sql_query(query, conn)
         conn.close()
+        
+        if df.empty:
+            st.info("ℹ️ No price data available yet. Trigger the DAG to start collecting data.")
+        
         return df
+        
+    except psycopg2.Error as db_error:
+        st.error(f"Database Error: {str(db_error)}")
+        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Database Error: {str(e)}")
+        st.error(f"Error fetching prices: {str(e)}")
         return pd.DataFrame()
 
 @st.cache_data(ttl=60)
 def get_alerts_from_db(limit: int = 50) -> pd.DataFrame:
-    """Get price alerts from database"""
+    """Get price alerts from database - FIXED VERSION"""
     try:
         conn = psycopg2.connect(**DB_CONFIG)
+        
+        # Check if table exists
+        check_table_query = """
+        SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_name = 'price_alerts'
+        );
+        """
+        
+        cursor = conn.cursor()
+        cursor.execute(check_table_query)
+        table_exists = cursor.fetchone()[0]
+        cursor.close()
+        
+        if not table_exists:
+            conn.close()
+            return pd.DataFrame()
+        
         query = f"""
         SELECT 
             coin_id,
@@ -133,7 +180,9 @@ def get_alerts_from_db(limit: int = 50) -> pd.DataFrame:
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df
+        
     except Exception as e:
+        # Silently fail for alerts table
         return pd.DataFrame()
 
 def get_state_color(state: str) -> str:
@@ -233,7 +282,13 @@ with col3:
 
 with col4:
     df_alerts = get_alerts_from_db(limit=100)
-    new_alerts = len(df_alerts[df_alerts['created_at'] > datetime.now() - timedelta(hours=24)])
+    if not df_alerts.empty and 'created_at' in df_alerts.columns:
+        # Convert created_at to datetime if it's not already
+        df_alerts['created_at'] = pd.to_datetime(df_alerts['created_at'])
+        new_alerts = len(df_alerts[df_alerts['created_at'] > datetime.now() - timedelta(hours=24)])
+    else:
+        new_alerts = 0
+    
     st.metric(
         label="🚨 Alerts (24h)",
         value=new_alerts,

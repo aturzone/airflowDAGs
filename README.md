@@ -1,4 +1,4 @@
-# 🚀 Airflow Crypto Trading DAGs + Streamlit Dashboard
+# Airflow Crypto Trading DAGs + Streamlit Dashboard
 
 <div align="center">
 
@@ -7,276 +7,276 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-316192?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
-**یک سیستم کامل برای مانیتورینگ و تحلیل real-time قیمت ارزهای دیجیتال**
+**Complete system for real-time cryptocurrency price monitoring and analysis**
 
-[نصب](#-نصب-و-راهاندازی) • [استفاده](#-استفاده) • [Dashboard](#-streamlit-dashboard) • [دستورات](#-دستورات-makefile)
+[Installation](#-installation) • [Usage](#-usage) • [Dashboard](#-streamlit-dashboard) • [Commands](#-makefile-commands)
 
 </div>
 
 ---
 
-## 📊 ویژگی‌های کلیدی
+## Key Features
 
-### 🔥 Apache Airflow
-- ✅ مانیتورینگ real-time قیمت Bitcoin و 7 ارز دیگر
-- ✅ دریافت خودکار داده از CoinGecko API
-- ✅ ذخیره‌سازی در PostgreSQL
-- ✅ سیستم Alert برای تغییرات قیمت
-- ✅ Data quality checks
-- ✅ گزارش‌دهی خودکار
+### Apache Airflow
+- Real-time monitoring of Bitcoin and 7 other cryptocurrencies
+- Automatic data fetching from CoinGecko API
+- PostgreSQL storage
+- Alert system for price changes
+- Data quality checks
+- Automatic reporting
 
-### 🎨 Streamlit Dashboard
-- ✅ نمایش real-time قیمت‌ها با نمودارهای تعاملی
-- ✅ مانیتورینگ وضعیت DAG runs
-- ✅ نمایش گزارش‌های نهایی
-- ✅ سیستم Alert visualization
-- ✅ تحلیل و Analytics پیشرفته
-- ✅ Auto-refresh خودکار
+### Streamlit Dashboard
+- Real-time price display with interactive charts
+- DAG run monitoring
+- Final report visualization
+- Alert system visualization
+- Advanced analytics
+- Auto-refresh capability
 
-### 🛠️ ابزارهای توسعه
-- ✅ Makefile کامل با 30+ دستور
-- ✅ Docker Compose برای راه‌اندازی آسان
-- ✅ Health checks خودکار
-- ✅ Logging و monitoring پیشرفته
+### Development Tools
+- Complete Makefile with 30+ commands
+- Docker Compose for easy setup
+- Automatic health checks
+- Advanced logging and monitoring
 
 ---
 
-## 🏗️ معماری سیستم
+## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
-│           🌐 User Interface Layer               │
+│           User Interface Layer                   │
 ├─────────────────┬───────────────────────────────┤
 │  Airflow UI     │  Streamlit Dashboard          │
 │  Port: 9090     │  Port: 8501                   │
 └─────────────────┴───────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────────┐
-│          🔄 Orchestration Layer                 │
+│          Orchestration Layer                     │
 ├──────────┬──────────┬──────────┬────────────────┤
 │Scheduler │ Webserver│  Worker  │   Triggerer    │
 └──────────┴──────────┴──────────┴────────────────┘
                     ↓
 ┌─────────────────────────────────────────────────┐
-│            💾 Data Layer                        │
+│            Data Layer                            │
 ├─────────────────┬───────────────────────────────┤
 │  PostgreSQL     │       Redis Cache             │
 │  Port: 5433     │       Port: 6380              │
 └─────────────────┴───────────────────────────────┘
                     ↓
 ┌─────────────────────────────────────────────────┐
-│          🌍 External APIs                       │
-│           CoinGecko API                         │
+│          External APIs                           │
+│           CoinGecko API                          │
 └─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 📁 ساختار پروژه
+## Project Structure
 
 ```
 airflowDAGs/
-├── 📄 Makefile                    # دستورات اتوماسیون
-├── 📄 docker-compose.yml          # کانفیگ Docker
-├── 📄 .env                        # متغیرهای محیطی
-├── 📄 requirements.txt            # وابستگی‌های Python
+├── Makefile                    # Automation commands
+├── docker-compose.yml          # Docker config
+├── .env                        # Environment variables
+├── requirements.txt            # Python dependencies
 │
-├── 📂 dags/                       # DAG های Airflow
+├── dags/                       # Airflow DAGs
 │   └── crypto_monitor/
 │       ├── bitcoin_price_dag.py
 │       └── crypto_functions.py
 │
-├── 📂 streamlit/                  # Dashboard
-│   ├── app.py                     # اپلیکیشن اصلی
+├── streamlit/                  # Dashboard
+│   ├── app.py                  # Main application
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── 📂 config/                     # تنظیمات
+├── config/                     # Configuration
 │   ├── airflow.cfg
 │   └── crypto/
 │       └── api_settings.py
 │
-├── 📂 scripts/                    # اسکریپت‌ها
+├── scripts/                    # Scripts
 │   └── setup.sh
 │
-├── 📂 logs/                       # لاگ‌ها
-├── 📂 plugins/                    # Plugin های سفارشی
-└── 📂 backups/                    # Backup های دیتابیس
+├── logs/                       # Logs
+├── plugins/                    # Custom plugins
+└── backups/                    # Database backups
 ```
 
 ---
 
-## 🚀 نصب و راه‌اندازی
+## Installation
 
-### پیش‌نیازها
+### Prerequisites
 
-- Docker & Docker Compose
-- Make (معمولاً پیش‌نصب است)
-- حداقل 4GB RAM
-- حداقل 10GB فضای خالی دیسک
+- Docker & Docker Compose v2
+- Make (usually pre-installed)
+- Minimum 4GB RAM
+- Minimum 10GB free disk space
 
-### نصب سریع
+### Quick Install
 
 ```bash
-# 1. Clone پروژه
+# 1. Clone project
 git clone git@github.com:aturzone/airflowDAGs.git
 cd airflowDAGs
 
-# 2. راه‌اندازی کامل (اولین بار)
+# 2. Complete setup (first time)
 make setup
 
-# 3. شروع سرویس‌ها
+# 3. Start services
 make start
 
-# 4. باز کردن Dashboard
+# 4. Open dashboard
 make dashboard
 ```
 
-**آدرس‌های دسترسی:**
-- 🌐 **Airflow UI**: http://localhost:9090
-- 📊 **Streamlit Dashboard**: http://localhost:8501
-- 🗄️ **PostgreSQL**: localhost:5433
-- 🔴 **Redis**: localhost:6380
+**Access URLs:**
+- Airflow UI: http://localhost:9090
+- Streamlit Dashboard: http://localhost:8501
+- PostgreSQL: localhost:5433
+- Redis: localhost:6380
 
-**اطلاعات ورود:**
+**Login Credentials:**
 - **Username**: admin
-- **Password**: (در فایل `.env` موجود است)
+- **Password**: (check `.env` file)
 
 ---
 
-## 📋 دستورات Makefile
+## Makefile Commands
 
-### 🏗️ نصب و راه‌اندازی
+### Setup & Initialization
 
 ```bash
-make setup              # نصب کامل (اولین بار)
-make start              # شروع همه سرویس‌ها
-make stop               # توقف همه سرویس‌ها
-make restart            # راه‌اندازی مجدد
-make status             # نمایش وضعیت سرویس‌ها
+make setup              # Complete setup (first time)
+make start              # Start all services
+make stop               # Stop all services
+make restart            # Restart all services
+make status             # Show service status
 ```
 
-### 📊 Dashboard و UI
+### Dashboard & UI
 
 ```bash
-make dashboard          # باز کردن Streamlit Dashboard
-make airflow-ui         # باز کردن Airflow UI
+make dashboard          # Open Streamlit Dashboard
+make airflow-ui         # Open Airflow UI
 ```
 
-### 📋 مدیریت DAG
+### DAG Management
 
 ```bash
-make unpause-dag        # فعال کردن DAG
-make pause-dag          # غیرفعال کردن DAG
-make trigger-dag        # اجرای دستی DAG
-make list-dags          # لیست همه DAG ها
-make test               # تست DAG
+make unpause-dag        # Enable DAG
+make pause-dag          # Disable DAG
+make trigger-dag        # Manual trigger
+make list-dags          # List all DAGs
+make test               # Test DAG
 ```
 
-### 📝 Logs و Monitoring
+### Logs & Monitoring
 
 ```bash
-make logs               # نمایش همه لاگ‌ها
-make logs-airflow       # لاگ Airflow
-make logs-streamlit     # لاگ Streamlit
-make logs-scheduler     # لاگ Scheduler
-make health             # بررسی سلامت سیستم
+make logs               # Show all logs
+make logs-airflow       # Airflow logs
+make logs-streamlit     # Streamlit logs
+make logs-scheduler     # Scheduler logs
+make health             # Health check
 ```
 
-### 🗄️ مدیریت Database
+### Database Management
 
 ```bash
-make db-shell           # اتصال به PostgreSQL
-make db-backup          # Backup دیتابیس
-make db-restore FILE=x  # بازیابی Backup
-make db-reset           # ریست کامل (⚠️ خطرناک!)
+make db-shell           # Connect to PostgreSQL
+make db-backup          # Backup database
+make db-restore FILE=x  # Restore backup
+make db-reset           # Reset database (⚠️ DANGER!)
 ```
 
-### 🧹 پاکسازی
+### Cleanup
 
 ```bash
-make clean              # پاکسازی فایل‌های موقت
-make clean-all          # پاکسازی کامل (⚠️ خطرناک!)
+make clean              # Clean temporary files
+make clean-all          # Complete cleanup (⚠️ DANGER!)
 ```
 
-### 🔧 توسعه
+### Development
 
 ```bash
-make dev                # حالت Development
-make shell              # Shell در Airflow
-make install-deps       # نصب وابستگی‌ها
+make dev                # Development mode
+make shell              # Shell in Airflow
+make install-deps       # Install dependencies
 ```
 
-### 📊 کامل‌ترین دستورات
+### Complete Commands
 
 ```bash
-make help               # راهنمای کامل
-make info               # اطلاعات پروژه
-make version            # نسخه‌های نصب شده
-make monitor            # مانیتورینگ با tmux
-make quick-start        # شروع سریع روزانه
+make help               # Complete help
+make info               # Project info
+make version            # Version info
+make monitor            # Monitoring with tmux
+make quick-start        # Quick daily start
 ```
 
 ---
 
-## 🎨 Streamlit Dashboard
+## Streamlit Dashboard
 
-Dashboard شامل **5 تب** است:
+Dashboard includes **5 tabs**:
 
-### 1️⃣ 📈 Live Prices
-- نمایش قیمت real-time ارزها
-- کارت‌های رنگی برای هر ارز
-- نمودار تاریخچه قیمت
-- درصد تغییر 24 ساعته
+### 1️⃣ Live Prices
+- Real-time crypto prices
+- Colorful cards for each coin
+- Price history chart
+- 24h change percentage
 
-### 2️⃣ 🔄 DAG Runs
-- لیست اجراهای اخیر DAG
-- وضعیت هر Task
-- زمان شروع و پایان
-- جزئیات کامل هر اجرا
+### 2️⃣ DAG Runs
+- Recent DAG executions
+- Task status
+- Start and end times
+- Complete details per run
 
-### 3️⃣ 📋 Latest Report
-- گزارش نهایی آخرین اجرا
-- متریک‌های عملکرد
-- وضعیت هر Task
-- Timeline اجرا
+### 3️⃣ Latest Report
+- Final report from last run
+- Performance metrics
+- Task status
+- Execution timeline
 
-### 4️⃣ 🚨 Alerts
-- هشدارهای قیمتی
-- آمار Alert های 24 ساعت
-- لیست تفصیلی Alertها
-- دسته‌بندی بر اساس شدت
+### 4️⃣ Alerts
+- Price alerts
+- 24h alert statistics
+- Detailed alert list
+- Categorized by severity
 
-### 5️⃣ 📊 Analytics
-- تحلیل حجم معاملات
-- توزیع تغییرات قیمت
-- نمودارهای تعاملی
-- جدول داده‌های تفصیلی
+### 5️⃣ Analytics
+- Trading volume analysis
+- Price change distribution
+- Interactive charts
+- Detailed data table
 
-### ویژگی‌های خاص:
-- ✅ Auto-refresh قابل تنظیم
-- ✅ Trigger دستی DAG
-- ✅ آمار سریع در Sidebar
-- ✅ نمودارهای تعاملی Plotly
-- ✅ رنگ‌بندی بر اساس وضعیت
+### Special Features:
+- Configurable auto-refresh
+- Manual DAG trigger
+- Quick stats in Sidebar
+- Interactive Plotly charts
+- Status-based coloring
 
 ---
 
-## 🎯 DAG های موجود
+## Available DAGs
 
 ### 1. Crypto Price Monitor (`crypto_price_monitor_fixed`)
 
-**توضیح**: مانیتورینگ real-time قیمت ارزهای دیجیتال
+**Description**: Real-time cryptocurrency price monitoring
 
-**Schedule**: هر 30 دقیقه
+**Schedule**: Every 30 minutes
 
 **Tasks**:
-1. **test_connection**: تست اتصال به دیتابیس
-2. **fetch_prices**: دریافت قیمت از CoinGecko API
-3. **save_prices**: ذخیره در PostgreSQL
-4. **final_report**: گزارش نهایی
+1. **test_connection**: Test database connection
+2. **fetch_prices**: Fetch prices from CoinGecko API
+3. **save_prices**: Save to PostgreSQL
+4. **final_report**: Final report
 
-**ارزهای پشتیبانی شده**:
+**Supported Cryptocurrencies**:
 - Bitcoin (BTC)
 - Ethereum (ETH)
 - Binance Coin (BNB)
@@ -288,129 +288,129 @@ Dashboard شامل **5 تب** است:
 
 ---
 
-## 🔧 تنظیمات پیشرفته
+## Advanced Configuration
 
-### تغییر Schedule DAG
+### Change DAG Schedule
 
-در فایل `dags/crypto_monitor/bitcoin_price_dag.py`:
+In `dags/crypto_monitor/bitcoin_price_dag.py`:
 
 ```python
 dag = DAG(
     dag_id='crypto_price_monitor_fixed',
-    schedule_interval=timedelta(minutes=30),  # ← تغییر اینجا
+    schedule_interval=timedelta(minutes=30),  # ← Change here
     ...
 )
 ```
 
-### تغییر Threshold Alert
+### Change Alert Threshold
 
-در فایل `config/crypto/api_settings.py`:
+In `config/crypto/api_settings.py`:
 
 ```python
-PRICE_CHANGE_THRESHOLD = 5.0  # ← تغییر اینجا (درصد)
+PRICE_CHANGE_THRESHOLD = 5.0  # ← Change here (percentage)
 ```
 
-### اضافه کردن ارزهای جدید
+### Add New Cryptocurrencies
 
 ```python
 CRYPTOCURRENCIES = {
     'bitcoin': 'BTC',
     'ethereum': 'ETH',
-    'your-new-coin': 'SYMBOL',  # ← اضافه اینجا
+    'your-new-coin': 'SYMBOL',  # ← Add here
 }
 ```
 
 ---
 
-## 🐛 عیب‌یابی
+## Troubleshooting
 
-### مشکل: Container ها start نمی‌شوند
+### Containers won't start
 
 ```bash
-# بررسی وضعیت
+# Check status
 make status
 
-# مشاهده logs
+# View logs
 make logs
 
-# راه‌اندازی مجدد
+# Restart
 make restart
 ```
 
-### مشکل: PostgreSQL Connection Error
+### PostgreSQL Connection Error
 
 ```bash
-# بررسی health
+# Check health
 make health
 
-# اتصال به database
+# Connect to database
 make db-shell
 ```
 
-### مشکل: Streamlit باز نمی‌شود
+### Streamlit won't open
 
 ```bash
-# چک کردن logs
+# Check logs
 make logs-streamlit
 
-# راه‌اندازی مجدد
+# Restart
 make restart-streamlit
 ```
 
-### مشکل: DAG اجرا نمی‌شود
+### DAG not running
 
 ```bash
-# فعال کردن DAG
+# Enable DAG
 make unpause-dag
 
-# تست دستی
+# Manual test
 make test
 
-# Trigger دستی
+# Manual trigger
 make trigger-dag
 ```
 
 ---
 
-## 📊 مانیتورینگ و Performance
+## Monitoring & Performance
 
-### بررسی منابع
+### Check Resources
 
 ```bash
-# وضعیت Container ها
+# Container status
 docker stats
 
-# فضای دیسک
+# Disk space
 docker system df
 
-# مشاهده logs
+# View logs
 make logs
 ```
 
-### بهینه‌سازی
+### Optimization
 
-در فایل `.env`:
+In `.env` file:
 
 ```env
-# تعداد Worker های موازی
+# Number of parallel workers
 AIRFLOW__CORE__PARALLELISM=32
 
-# تعداد DAG های همزمان
+# Number of concurrent DAGs
 AIRFLOW__CORE__DAG_CONCURRENCY=16
 ```
 
 ---
 
-## 🔐 امنیت
+## Security
 
-### ⚠️ نکات مهم امنیتی:
+### ⚠️ Important Security Notes:
 
-1. **NEVER** فایل `.env` را commit نکنید
-2. Password ها را تغییر دهید قبل از production
-3. از Fernet Key های قوی استفاده کنید
-4. PostgreSQL را از خارج در دسترس قرار ندهید در production
+1. **NEVER** commit `.env` file
+2. Change passwords before production
+3. Use strong Fernet Keys
+4. Don't expose PostgreSQL externally in production
 
-### تولید Key های امنیتی:
+### Generate Security Keys:
 
 ```bash
 # Fernet Key
@@ -422,47 +422,47 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 ---
 
-## 🤝 مشارکت
+## Contributing
 
-مشارکت‌ها خوش‌آمد هستند! لطفاً:
+Contributions are welcome! Please:
 
-1. Fork کنید
-2. Branch جدید بسازید (`git checkout -b feature/AmazingFeature`)
-3. Commit کنید (`git commit -m 'Add some AmazingFeature'`)
-4. Push کنید (`git push origin feature/AmazingFeature`)
-5. Pull Request باز کنید
+1. Fork the repo
+2. Create a new branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ---
 
-## 📝 To-Do List
+## To-Do List
 
-- [ ] اضافه کردن Telegram Bot برای Alerts
-- [ ] پشتیبانی از ارزهای بیشتر
-- [ ] Machine Learning برای پیش‌بینی قیمت
-- [ ] Export به Excel/PDF
-- [ ] User Authentication در Streamlit
+- [ ] Add Telegram Bot for alerts
+- [ ] Support more cryptocurrencies
+- [ ] Machine Learning for price prediction
+- [ ] Export to Excel/PDF
+- [ ] User Authentication in Streamlit
 - [ ] Dark/Light Theme Toggle
 - [ ] Multi-language Support
 
 ---
 
-## 📞 پشتیبانی
+## Support
 
-اگر مشکلی داشتید:
+If you have issues:
 
-1. ابتدا [عیب‌یابی](#-عیبیابی) را بررسی کنید
-2. Issues را در GitHub بررسی کنید
-3. Issue جدید باز کنید با جزئیات کامل
-
----
-
-## 📜 لایسنس
-
-این پروژه تحت لایسنس MIT منتشر شده است.
+1. Check [Troubleshooting](#troubleshooting) first
+2. Review Issues on GitHub
+3. Open a new Issue with complete details
 
 ---
 
-## 🙏 تشکر
+## License
+
+This project is released under the MIT License.
+
+---
+
+## Acknowledgments
 
 - [Apache Airflow](https://airflow.apache.org/)
 - [Streamlit](https://streamlit.io/)
@@ -474,7 +474,7 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 <div align="center">
 
-**⭐ اگر این پروژه مفید بود، حتماً Star بدید! ⭐**
+**⭐ If this project was helpful, please star it! ⭐**
 
 Made with ❤️ for Crypto Enthusiasts
 

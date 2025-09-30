@@ -1,5 +1,5 @@
 # dags/crypto_monitor/crypto_functions.py
-# نسخه بهبود یافته با حل مشکل return types
+# COMPLETE FIXED VERSION - Replace entire file
 
 import requests
 import pandas as pd
@@ -10,11 +10,10 @@ import logging
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 
-# Setup logging
 logger = logging.getLogger(__name__)
 
 class CryptoAPIConfig:
-    """تنظیمات API برای دریافت قیمت ارزهای دیجیتال"""
+    """Configuration for crypto API"""
     
     COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
     
@@ -31,25 +30,21 @@ class CryptoAPIConfig:
     
     FIAT_CURRENCIES = ['usd', 'eur', 'btc']
     API_TIMEOUT = 30
-    PRICE_CHANGE_THRESHOLD = 5.0  # درصد تغییر برای alert
+    PRICE_CHANGE_THRESHOLD = 5.0
     
     @classmethod
     def get_api_endpoints(cls) -> Dict[str, str]:
-        """آدرس‌های مختلف API"""
         return {
             'simple_price': f"{cls.COINGECKO_BASE_URL}/simple/price",
             'coins_markets': f"{cls.COINGECKO_BASE_URL}/coins/markets",
-            'coin_history': f"{cls.COINGECKO_BASE_URL}/coins/{{coin_id}}/history",
-            'global_data': f"{cls.COINGECKO_BASE_URL}/global"
         }
     
     @classmethod
     def get_coins_list(cls) -> List[str]:
-        """لیست نام‌های کامل ارزها برای API"""
         return list(cls.CRYPTOCURRENCIES.keys())
 
 class CryptoPriceCollector:
-    """کلاس اصلی برای جمع‌آوری و پردازش قیمت ارزهای دیجیتال"""
+    """Main class for collecting crypto prices"""
     
     def __init__(self):
         self.config = CryptoAPIConfig()
@@ -57,23 +52,13 @@ class CryptoPriceCollector:
         self.session.timeout = self.config.API_TIMEOUT
     
     def fetch_current_prices(self, coins: List[str] = None, vs_currencies: List[str] = None) -> Dict:
-        """
-        دریافت قیمت فعلی ارزهای دیجیتال از CoinGecko
-        
-        Args:
-            coins: لیست ارزهای مورد نظر
-            vs_currencies: لیست ارزهای مرجع (USD, EUR, etc.)
-            
-        Returns:
-            Dict حاوی قیمت‌ها و اطلاعات مربوطه
-        """
+        """Fetch current crypto prices from CoinGecko"""
         if not coins:
             coins = self.config.get_coins_list()
         if not vs_currencies:
             vs_currencies = self.config.FIAT_CURRENCIES
         
         try:
-            # ساخت URL
             endpoint = self.config.get_api_endpoints()['simple_price']
             
             params = {
@@ -84,7 +69,6 @@ class CryptoPriceCollector:
                 'include_last_updated_at': 'true'
             }
             
-            # درخواست API
             logger.info(f"Fetching prices for {len(coins)} cryptocurrencies...")
             response = self.session.get(endpoint, params=params)
             response.raise_for_status()
@@ -94,15 +78,12 @@ class CryptoPriceCollector:
             
             return self._process_price_data(data)
             
-        except requests.exceptions.RequestException as e:
-            logger.error(f"API request failed: {str(e)}")
-            raise
         except Exception as e:
-            logger.error(f"Error processing price data: {str(e)}")
+            logger.error(f"Error fetching prices: {str(e)}")
             raise
     
     def _process_price_data(self, raw_data: Dict) -> Dict:
-        """پردازش داده‌های خام دریافتی از API"""
+        """Process raw API data"""
         processed_data = {
             'timestamp': datetime.utcnow(),
             'prices': [],
@@ -114,7 +95,6 @@ class CryptoPriceCollector:
         }
         
         for coin_id, coin_data in raw_data.items():
-            # استخراج نماد از config
             symbol = self.config.CRYPTOCURRENCIES.get(coin_id, coin_id.upper())
             
             price_record = {
@@ -134,19 +114,13 @@ class CryptoPriceCollector:
         return processed_data
     
     def save_to_database(self, price_data: Dict) -> Dict:
-        """
-        ذخیره داده‌ها در PostgreSQL
-        
-        Returns:
-            Dict با اطلاعات نتیجه عملیات
-        """
+        """Save data to PostgreSQL"""
         try:
             postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
             
-            # ایجاد جدول در صورت عدم وجود
+            logger.info("Creating/verifying database tables...")
             self._create_tables_if_not_exists(postgres_hook)
             
-            # Insert کردن داده‌ها
             records_inserted = 0
             failed_records = 0
             
@@ -162,73 +136,61 @@ class CryptoPriceCollector:
                     
                     postgres_hook.run(insert_sql, parameters=price_record)
                     records_inserted += 1
+                    logger.info(f"Inserted: {price_record['symbol']} - ${price_record['price_usd']:.2f}")
                     
                 except Exception as record_error:
-                    logger.warning(f"Failed to insert record for {price_record.get('coin_id', 'unknown')}: {record_error}")
+                    logger.warning(f"Failed to insert {price_record.get('coin_id')}: {record_error}")
                     failed_records += 1
             
-            result = {
+            return {
                 'status': 'success' if records_inserted > 0 else 'no_data',
                 'records_inserted': records_inserted,
                 'failed_records': failed_records,
                 'total_records': len(price_data['prices']),
-                'success_rate': round((records_inserted / len(price_data['prices'])) * 100, 2) if price_data['prices'] else 0,
-                'timestamp': datetime.utcnow().isoformat(),
                 'message': f"Successfully inserted {records_inserted} out of {len(price_data['prices'])} records"
             }
             
-            logger.info(f"✅ Database save result: {result['message']}")
-            return result
-            
         except Exception as e:
-            error_result = {
+            logger.error(f"Database error: {str(e)}")
+            return {
                 'status': 'failed',
                 'error': str(e),
                 'records_inserted': 0,
-                'failed_records': len(price_data.get('prices', [])),
-                'total_records': len(price_data.get('prices', [])),
-                'success_rate': 0,
-                'timestamp': datetime.utcnow().isoformat(),
                 'message': f"Database save failed: {str(e)}"
             }
-            logger.error(f"❌ Database error: {error_result['message']}")
-            return error_result
     
     def _create_tables_if_not_exists(self, postgres_hook):
-        """ایجاد جداول مورد نیاز"""
+        """Create required tables"""
         
-        # جدول قیمت‌ها - PostgreSQL syntax
         create_prices_table = """
         CREATE TABLE IF NOT EXISTS crypto_prices (
             id SERIAL PRIMARY KEY,
             coin_id VARCHAR(50) NOT NULL,
             symbol VARCHAR(10) NOT NULL,
-            price_usd DECIMAL(20, 8),
-            price_eur DECIMAL(20, 8),
-            price_btc DECIMAL(20, 12),
-            change_24h DECIMAL(10, 4),
-            volume_24h DECIMAL(20, 2),
+            price_usd NUMERIC(20, 8),
+            price_eur NUMERIC(20, 8),
+            price_btc NUMERIC(20, 12),
+            change_24h NUMERIC(10, 4),
+            volume_24h NUMERIC(20, 2),
             last_updated TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
         
-        # ایجاد index ها برای performance بهتر
         create_indexes = """
         CREATE INDEX IF NOT EXISTS idx_crypto_prices_coin_created ON crypto_prices(coin_id, created_at);
         CREATE INDEX IF NOT EXISTS idx_crypto_prices_symbol_created ON crypto_prices(symbol, created_at);
         CREATE INDEX IF NOT EXISTS idx_crypto_prices_created_at ON crypto_prices(created_at);
         """
         
-        # جدول alerts
         create_alerts_table = """
         CREATE TABLE IF NOT EXISTS price_alerts (
             id SERIAL PRIMARY KEY,
             coin_id VARCHAR(50) NOT NULL,
             symbol VARCHAR(10) NOT NULL,
             alert_type VARCHAR(20) NOT NULL,
-            threshold_value DECIMAL(10, 4),
-            current_value DECIMAL(10, 4),
+            threshold_value NUMERIC(10, 4),
+            current_value NUMERIC(10, 4),
             message TEXT,
             is_sent BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -239,125 +201,59 @@ class CryptoPriceCollector:
             postgres_hook.run(create_prices_table)
             postgres_hook.run(create_indexes) 
             postgres_hook.run(create_alerts_table)
-            logger.info("Database tables created/verified successfully")
+            logger.info("Database tables verified/created")
         except Exception as e:
             logger.error(f"Error creating tables: {str(e)}")
             raise
-    
-    def check_price_alerts(self, price_data: Dict) -> List[Dict]:
-        """بررسی شرایط alert و ایجاد هشدارها"""
-        alerts = []
-        
-        for price_record in price_data['prices']:
-            change_24h = abs(price_record.get('change_24h', 0))
-            
-            # چک کردن threshold
-            if change_24h >= self.config.PRICE_CHANGE_THRESHOLD:
-                alert = {
-                    'coin_id': price_record['coin_id'],
-                    'symbol': price_record['symbol'],
-                    'alert_type': 'PRICE_CHANGE',
-                    'threshold_value': self.config.PRICE_CHANGE_THRESHOLD,
-                    'current_value': change_24h,
-                    'message': f"{price_record['symbol']} price changed by {change_24h:.2f}% in 24h. Current price: ${price_record['price_usd']:.2f}",
-                    'created_at': datetime.utcnow()
-                }
-                alerts.append(alert)
-        
-        if alerts:
-            self._save_alerts(alerts)
-            logger.info(f"Generated {len(alerts)} price alerts")
-        
-        return alerts
-    
-    def _save_alerts(self, alerts: List[Dict]) -> Dict:
-        """
-        ذخیره alerts در دیتابیس
-        
-        Returns:
-            Dict با نتیجه عملیات
-        """
-        try:
-            postgres_hook = PostgresHook(postgres_conn_id='postgres_default')
-            
-            alerts_saved = 0
-            for alert in alerts:
-                try:
-                    insert_sql = """
-                    INSERT INTO price_alerts 
-                    (coin_id, symbol, alert_type, threshold_value, current_value, message, created_at)
-                    VALUES (%(coin_id)s, %(symbol)s, %(alert_type)s, %(threshold_value)s, 
-                            %(current_value)s, %(message)s, %(created_at)s)
-                    """
-                    postgres_hook.run(insert_sql, parameters=alert)
-                    alerts_saved += 1
-                    
-                except Exception as alert_error:
-                    logger.warning(f"Failed to save alert: {alert_error}")
-                    
-            return {
-                'status': 'success' if alerts_saved > 0 else 'no_alerts',
-                'alerts_saved': alerts_saved,
-                'total_alerts': len(alerts),
-                'message': f"Saved {alerts_saved} out of {len(alerts)} alerts"
-            }
-                
-        except Exception as e:
-            logger.error(f"Error saving alerts: {str(e)}")
-            return {
-                'status': 'failed',
-                'error': str(e),
-                'alerts_saved': 0,
-                'total_alerts': len(alerts),
-                'message': f"Failed to save alerts: {str(e)}"
-            }
 
 # ============================================================================
-# ⭐ توابع برای استفاده در DAG - نسخه بهبود یافته
+# DAG FUNCTIONS - FIXED FOR XCOM SERIALIZATION
 # ============================================================================
 
 def fetch_crypto_prices(**context) -> Dict:
-    """تابع اصلی برای دریافت قیمت‌ها - برای استفاده در PythonOperator"""
+    """Fetch prices and prepare for XCom (JSON-serializable)"""
     try:
         collector = CryptoPriceCollector()
-        
-        # دریافت قیمت‌ها
         price_data = collector.fetch_current_prices()
         
-        # ذخیره در XCom برای task های بعدی
-        context['task_instance'].xcom_push(key='price_data', value=price_data)
+        # CRITICAL FIX: Convert datetime to ISO string for JSON serialization
+        if price_data.get('timestamp'):
+            price_data['timestamp'] = price_data['timestamp'].isoformat()
         
-        logger.info(f"✅ Successfully fetched prices for {len(price_data['prices'])} cryptocurrencies")
+        for price in price_data.get('prices', []):
+            if isinstance(price.get('last_updated'), datetime):
+                price['last_updated'] = price['last_updated'].isoformat()
+            if isinstance(price.get('created_at'), datetime):
+                price['created_at'] = price['created_at'].isoformat()
+        
+        # Push to XCom
+        context['task_instance'].xcom_push(key='price_data', value=price_data)
+        logger.info(f"Successfully fetched and pushed {len(price_data['prices'])} prices to XCom")
+        
         return price_data
         
     except Exception as e:
-        logger.error(f"❌ Error in fetch_crypto_prices: {str(e)}")
-        # بجای raise کردن، یک empty result برگردون
+        logger.error(f"Error in fetch_crypto_prices: {str(e)}")
         empty_result = {
-            'timestamp': datetime.utcnow(),
+            'timestamp': datetime.utcnow().isoformat(),
             'prices': [],
-            'metadata': {
-                'total_coins': 0,
-                'currencies': [],
-                'source': 'error',
-                'error': str(e)
-            }
+            'metadata': {'total_coins': 0, 'currencies': [], 'source': 'error', 'error': str(e)}
         }
         context['task_instance'].xcom_push(key='price_data', value=empty_result)
         return empty_result
 
 def save_crypto_prices(**context) -> Dict:
-    """
-    ذخیره قیمت‌ها در دیتابیس
-    
-    Returns:
-        Dict همیشه با status, message و اطلاعات تفصیلی
-    """
+    """Save prices to database"""
     try:
         collector = CryptoPriceCollector()
+        ti = context['task_instance']
         
-        # دریافت داده از XCom
-        price_data = context['task_instance'].xcom_pull(key='price_data', task_ids='fetch_prices')
+        # Try multiple ways to get data from XCom
+        price_data = ti.xcom_pull(key='price_data', task_ids='fetch_prices')
+        if not price_data:
+            price_data = ti.xcom_pull(task_ids='fetch_prices')
+        if not price_data:
+            price_data = ti.xcom_pull(task_ids='fetch_prices', key='return_value')
         
         if not price_data:
             return {
@@ -375,10 +271,15 @@ def save_crypto_prices(**context) -> Dict:
                 'message': 'No price records to save'
             }
         
-        # ذخیره در دیتابیس - حالا همیشه Dict برمی‌گردونه
-        save_result = collector.save_to_database(price_data)
+        # Convert ISO strings back to datetime objects
+        for price in price_data.get('prices', []):
+            if isinstance(price.get('last_updated'), str):
+                price['last_updated'] = datetime.fromisoformat(price['last_updated'])
+            if isinstance(price.get('created_at'), str):
+                price['created_at'] = datetime.fromisoformat(price['created_at'])
         
-        logger.info(f"✅ Save operation completed: {save_result['message']}")
+        save_result = collector.save_to_database(price_data)
+        logger.info(f"Save operation completed: {save_result['message']}")
         return save_result
         
     except Exception as e:
@@ -387,55 +288,51 @@ def save_crypto_prices(**context) -> Dict:
             'error': str(e),
             'records_inserted': 0,
             'total_records': 0,
-            'success_rate': 0,
-            'timestamp': datetime.utcnow().isoformat(),
             'message': f"Save operation failed: {str(e)}"
         }
-        logger.error(f"❌ Error in save_crypto_prices: {error_result['message']}")
+        logger.error(f"Error in save_crypto_prices: {error_result['message']}")
         return error_result
 
 def check_alerts(**context) -> Dict:
-    """
-    بررسی شرایط alert
-    
-    Returns:
-        Dict با اطلاعات alerts
-    """
+    """Check alert conditions"""
     try:
-        collector = CryptoPriceCollector()
-        
-        # دریافت داده از XCom
-        price_data = context['task_instance'].xcom_pull(key='price_data', task_ids='fetch_prices')
+        ti = context['task_instance']
+        price_data = ti.xcom_pull(key='price_data', task_ids='fetch_prices')
         
         if not price_data or not price_data.get('prices'):
             return {
                 'status': 'no_data',
                 'alerts_generated': 0,
-                'message': 'No price data available for alert checking'
+                'message': 'No price data available'
             }
         
-        # بررسی alerts
-        alerts = collector.check_price_alerts(price_data)
+        alerts = []
+        threshold = CryptoAPIConfig.PRICE_CHANGE_THRESHOLD
         
-        # ذخیره alerts در XCom
-        context['task_instance'].xcom_push(key='alerts', value=alerts)
+        for price_record in price_data['prices']:
+            change_24h = abs(price_record.get('change_24h', 0))
+            
+            if change_24h >= threshold:
+                alert = {
+                    'coin_id': price_record['coin_id'],
+                    'symbol': price_record['symbol'],
+                    'alert_type': 'PRICE_CHANGE',
+                    'threshold_value': threshold,
+                    'current_value': change_24h,
+                    'message': f"{price_record['symbol']} changed by {change_24h:.2f}% in 24h"
+                }
+                alerts.append(alert)
         
-        result = {
+        return {
             'status': 'success' if alerts else 'no_alerts',
             'alerts_generated': len(alerts),
-            'alerts': alerts,
-            'message': f"Generated {len(alerts)} alerts from {len(price_data['prices'])} coins"
+            'message': f"Generated {len(alerts)} alerts"
         }
         
-        logger.info(f"✅ Alert check completed: {result['message']}")
-        return result
-        
     except Exception as e:
-        error_result = {
+        return {
             'status': 'failed',
             'error': str(e),
             'alerts_generated': 0,
             'message': f"Alert checking failed: {str(e)}"
         }
-        logger.error(f"❌ Error in check_alerts: {error_result['message']}")
-        return error_result
