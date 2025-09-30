@@ -1,4 +1,5 @@
 # dags/crypto_monitor/bitcoin_price_dag.py
+# نسخه نهایی - حل شده مشکل final_report
 
 import sys
 import os
@@ -8,13 +9,14 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from airflow import DAG
-from airflow.operators import PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 import requests
 import logging
 import json
 
+# Import کردن توابع محلی
 try:
     from crypto_functions import (
         fetch_crypto_prices,
@@ -36,6 +38,7 @@ except ImportError as e:
         logging.error("crypto_functions not imported properly")
         raise ImportError("crypto_functions module not found")
 
+# تنظیمات پیش‌فرض DAG
 default_args = {
     'owner': 'crypto_team',
     'depends_on_past': False,
@@ -46,6 +49,7 @@ default_args = {
     'retry_delay': timedelta(minutes=2),
 }
 
+# ⭐ تعریف DAG
 dag = DAG(
     dag_id='crypto_price_monitor_fixed',
     default_args=default_args,
@@ -59,6 +63,7 @@ dag = DAG(
     is_paused_upon_creation=True
 )
 
+# ⭐ Task 1: تست connection
 def test_connection(**context):
     """تست ساده برای اطمینان از کارکرد PostgreSQL"""
     try:
