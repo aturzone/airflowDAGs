@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.operators.python import PythonOperator # type: ignore
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.models import Variable
 import requests
