@@ -288,6 +288,36 @@ Dashboard includes **5 tabs**:
 
 ---
 
+### 2. Universal Anomaly Detection (`universal_anomaly_detection`)
+
+**Description**: Database-agnostic ML-based anomaly detection system
+
+**Schedule**: Every 15 minutes
+
+**Features**:
+- 🎯 Works with any database (PostgreSQL, MySQL, ClickHouse)
+- 🤖 Auto feature engineering
+- 📊 Ensemble ML models (Isolation Forest, LOF, Statistical)
+- 🚨 Real-time alerting (Slack, Email)
+- 📈 Streamlit dashboard
+
+**Tasks**:
+1. `discover_database` - Auto-discover database schema
+2. `extract_features` - Extract features automatically
+3. `calculate_baselines` - Calculate adaptive baselines
+4. `train_models` - Train/load ML ensemble
+5. `detect_anomalies` - Detect anomalies
+6. `save_to_database` - Save results
+7. `generate_alerts` - Send notifications
+8. `final_report` - Generate report
+
+**Commands**:
+```bash
+make anomaly-setup        # Setup system
+make anomaly-test         # Run tests
+make anomaly-deploy       # Deploy DAG
+make anomaly-dashboard    # Open dashboard
+
 ## Advanced Configuration
 
 ### Change DAG Schedule

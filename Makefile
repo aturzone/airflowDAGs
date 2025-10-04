@@ -332,3 +332,43 @@ version: ## Show version information
 	@echo "Airflow: $$($(DOCKER_COMPOSE) exec -T $(AIRFLOW_SERVICE) airflow version 2>/dev/null || echo 'Not running')"
 	@echo "Docker Compose: $$(docker-compose version --short)"
 	@echo "Docker: $$(docker --version | cut -d' ' -f3)"
+
+
+# ================================================================
+# 🎯 ANOMALY DETECTION COMMANDS
+# ================================================================
+
+anomaly-setup: ## Setup anomaly detection system
+	@echo "$(GREEN)🔧 Setting up Anomaly Detection...$(NC)"
+	@mkdir -p dags/anomaly_detection models tests docs/anomaly_detection
+	@touch dags/anomaly_detection/__init__.py
+	@$(COMPOSE) exec airflow-webserver pip install scikit-learn clickhouse-connect mysql-connector-python pyarrow
+	@echo "$(GREEN)✅ Setup complete$(NC)"
+
+anomaly-test: ## Test anomaly detection
+	@echo "$(GREEN)🧪 Testing Anomaly Detection...$(NC)"
+	@$(COMPOSE) exec airflow-webserver pytest tests/test_anomaly_detection.py -v
+
+anomaly-deploy: ## Deploy anomaly detection DAG
+	@echo "$(GREEN)🚀 Deploying Anomaly Detection DAG...$(NC)"
+	@$(COMPOSE) exec airflow-webserver airflow dags unpause universal_anomaly_detection
+	@echo "$(GREEN)✅ DAG deployed and unpaused$(NC)"
+
+anomaly-trigger: ## Trigger anomaly detection manually
+	@$(COMPOSE) exec airflow-webserver airflow dags trigger universal_anomaly_detection
+
+anomaly-status: ## Show anomaly detection status
+	@$(COMPOSE) exec airflow-webserver airflow dags state universal_anomaly_detection
+
+anomaly-logs: ## View anomaly detection logs
+	@$(COMPOSE) logs -f airflow-scheduler | grep universal_anomaly
+
+anomaly-dashboard: ## Open anomaly detection dashboard
+	@echo "$(GREEN)📊 Starting Anomaly Dashboard...$(NC)"
+	@cd streamlit && streamlit run anomaly_dashboard.py --server.port 8502
+
+anomaly-db-check: ## Check anomaly_detections table
+	@$(COMPOSE) exec postgres psql -U airflow -d airflow -c "SELECT COUNT(*) as total FROM anomaly_detections;"
+
+anomaly-db-recent: ## Show recent anomalies
+	@$(COMPOSE) exec postgres psql -U airflow -d airflow -c "SELECT * FROM anomaly_detections ORDER BY detected_at DESC LIMIT 10;"
