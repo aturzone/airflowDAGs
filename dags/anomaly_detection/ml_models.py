@@ -1,8 +1,7 @@
 """
-ML Models for Anomaly Detection
-================================
-Ensemble approach combining multiple algorithms.
-Inspired by Netdata AI's multi-model strategy.
+ML Models for Anomaly Detection - FIXED VERSION
+================================================
+این نسخه مشکل feature mismatch رو نداره
 """
 
 import logging
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnomalyDetectionEnsemble:
-    """Ensemble of anomaly detection models"""
+    """Ensemble of anomaly detection models - با feature consistency"""
     
     def __init__(self, baselines: Optional[Dict] = None):
         self.baselines = baselines or {}
@@ -27,11 +26,6 @@ class AnomalyDetectionEnsemble:
     def train(self, features_df: pd.DataFrame, contamination: float = 0.05):
         """
         Train ensemble of models.
-        
-        Models:
-        1. Isolation Forest - multivariate anomalies
-        2. Local Outlier Factor - density-based
-        3. Statistical - z-score based
         """
         from sklearn.preprocessing import StandardScaler
         from sklearn.ensemble import IsolationForest
@@ -39,9 +33,15 @@ class AnomalyDetectionEnsemble:
         
         logger.info("🏋️ Training anomaly detection ensemble...")
         
-        # Prepare data
+        # Prepare data - فقط numeric columns
         X = self._prepare_features(features_df)
+        
+        if len(X) < 10:
+            raise ValueError(f"Not enough data! Need at least 10 rows, got {len(X)}")
+        
+        # ذخیره feature names برای استفاده بعدی
         self.feature_names = X.columns.tolist()
+        logger.info(f"📊 Training with {len(X)} samples and {len(self.feature_names)} features")
         
         # Scale features
         self.scaler = StandardScaler()
@@ -52,7 +52,7 @@ class AnomalyDetectionEnsemble:
         iso_forest = IsolationForest(
             contamination=contamination,
             n_estimators=100,
-            max_samples='auto',
+            max_samples=min(256, len(X)),
             random_state=42,
             n_jobs=-1
         )
@@ -61,10 +61,11 @@ class AnomalyDetectionEnsemble:
         
         # 2. Local Outlier Factor
         logger.info("  Training Local Outlier Factor...")
+        n_neighbors = min(20, len(X) - 1)
         lof = LocalOutlierFactor(
-            n_neighbors=20,
+            n_neighbors=n_neighbors,
             contamination=contamination,
-            novelty=True,  # For prediction on new data
+            novelty=True,
             n_jobs=-1
         )
         lof.fit(X_scaled)
@@ -74,69 +75,86 @@ class AnomalyDetectionEnsemble:
         logger.info("  Calculating statistical thresholds...")
         self.models['statistical'] = self._calculate_statistical_thresholds(X)
         
-        logger.info(f"✅ Trained {len(self.models)} models")
+        logger.info(f"✅ Trained {len(self.models)} models successfully")
     
     def predict(self, features_df: pd.DataFrame) -> pd.DataFrame:
         """
         Predict anomalies using ensemble.
-        Returns DataFrame with anomaly scores and labels.
         """
         logger.info("🔍 Predicting anomalies...")
         
-        # Prepare features
-        X = self._prepare_features(features_df)
+        # Prepare features - با همون ستون‌هایی که training داشتیم
+        X = self._prepare_features(features_df, inference=True)
+        
+        # Scale
         X_scaled = self.scaler.transform(X)
         
         # Get predictions from each model
         results = features_df.copy()
         
         # 1. Isolation Forest
-        iso_scores = self.models['isolation_forest'].decision_function(X_scaled)
-        iso_pred = self.models['isolation_forest'].predict(X_scaled)
-        results['iso_forest_score'] = iso_scores
-        results['iso_forest_anomaly'] = (iso_pred == -1).astype(int)
+        results['iso_forest_score'] = self.models['isolation_forest'].score_samples(X_scaled)
+        results['iso_forest_anomaly'] = self.models['isolation_forest'].predict(X_scaled)
+        results['iso_forest_anomaly'] = (results['iso_forest_anomaly'] == -1).astype(int)
         
-        # 2. Local Outlier Factor
-        lof_scores = self.models['lof'].decision_function(X_scaled)
-        lof_pred = self.models['lof'].predict(X_scaled)
-        results['lof_score'] = lof_scores
-        results['lof_anomaly'] = (lof_pred == -1).astype(int)
+        # 2. LOF
+        results['lof_score'] = self.models['lof'].score_samples(X_scaled)
+        results['lof_anomaly'] = self.models['lof'].predict(X_scaled)
+        results['lof_anomaly'] = (results['lof_anomaly'] == -1).astype(int)
         
         # 3. Statistical
-        stat_anomalies = self._statistical_predict(X)
-        results['statistical_anomaly'] = stat_anomalies
+        results['statistical_anomaly'] = self._statistical_predict(X)
         
-        # Ensemble scoring
+        # Calculate ensemble score
         results['anomaly_score'] = self._calculate_ensemble_score(results)
         
-        # Final anomaly label (threshold-based)
+        # Final decision (threshold at 95th percentile)
         threshold = results['anomaly_score'].quantile(0.95)
-        results['is_anomaly'] = results['anomaly_score'] > threshold
+        results['is_anomaly'] = (results['anomaly_score'] > threshold).astype(int)
         
-        # Categorize anomaly type
+        # Categorize anomalies
         results['anomaly_type'] = results.apply(self._categorize_anomaly, axis=1)
         
-        logger.info(f"✅ Detected {results['is_anomaly'].sum()} anomalies")
+        anomaly_count = results['is_anomaly'].sum()
+        logger.info(f"✅ Detected {anomaly_count} anomalies")
         
         return results
     
-    def _prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Prepare features for modeling"""
-        # Select only numeric columns
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
+    def _prepare_features(self, df: pd.DataFrame, inference: bool = False) -> pd.DataFrame:
+        """
+        CRITICAL: این متد feature consistency رو تضمین می‌کنه
+        """
+        # فقط numeric columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        X = df[numeric_cols].copy()
         
-        # Remove ID columns
-        feature_cols = [col for col in numeric_cols 
-                       if not col.endswith('_id') and col != 'row_id']
-        
-        X = df[feature_cols].copy()
-        
-        # Handle missing values
+        # حذف null values
         X = X.fillna(X.median())
         
-        # Remove infinite values
+        # حذف infinite values
         X = X.replace([np.inf, -np.inf], np.nan)
-        X = X.fillna(0)
+        X = X.fillna(X.median())
+        
+        # حذف constant columns (فقط در training)
+        if not inference:
+            # Training mode: حذف ستون‌های constant
+            X = X.loc[:, X.std() > 0]
+        else:
+            # Inference mode: استفاده از همون feature های training
+            if self.feature_names is not None:
+                # فقط ستون‌هایی که در training بودن رو نگه دار
+                missing_features = set(self.feature_names) - set(X.columns)
+                extra_features = set(X.columns) - set(self.feature_names)
+                
+                # اضافه کردن ستون‌های missing با مقدار 0
+                for feature in missing_features:
+                    X[feature] = 0
+                
+                # حذف ستون‌های اضافی
+                X = X.drop(columns=list(extra_features), errors='ignore')
+                
+                # ترتیب ستون‌ها رو مثل training کن
+                X = X[self.feature_names]
         
         return X
     
@@ -145,20 +163,16 @@ class AnomalyDetectionEnsemble:
         thresholds = {}
         
         for col in X.columns:
-            mean = X[col].mean()
-            std = X[col].std()
-            median = X[col].median()
-            q25 = X[col].quantile(0.25)
-            q75 = X[col].quantile(0.75)
-            iqr = q75 - q25
+            col_data = X[col]
+            q1 = col_data.quantile(0.25)
+            q3 = col_data.quantile(0.75)
+            iqr = q3 - q1
             
             thresholds[col] = {
-                'mean': mean,
-                'std': std,
-                'median': median,
-                'iqr': iqr,
-                'lower_bound': q25 - 1.5 * iqr,
-                'upper_bound': q75 + 1.5 * iqr,
+                'mean': float(col_data.mean()),
+                'std': float(col_data.std()),
+                'lower_bound': float(q1 - 1.5 * iqr),
+                'upper_bound': float(q3 + 1.5 * iqr),
                 'z_threshold': 3.0
             }
         
@@ -190,8 +204,8 @@ class AnomalyDetectionEnsemble:
         """Calculate weighted ensemble score"""
         
         # Normalize scores to 0-1 range
-        iso_norm = self._normalize_score(-results['iso_forest_score'])  # Invert (more negative = more anomalous)
-        lof_norm = self._normalize_score(-results['lof_score'])  # Invert
+        iso_norm = self._normalize_score(-results['iso_forest_score'])
+        lof_norm = self._normalize_score(-results['lof_score'])
         
         # Weighted average
         ensemble_score = (
@@ -217,7 +231,6 @@ class AnomalyDetectionEnsemble:
         if not row['is_anomaly']:
             return 'normal'
         
-        # Determine which model(s) flagged it
         flagged_by = []
         
         if row.get('iso_forest_anomaly', 0) == 1:
@@ -273,65 +286,3 @@ class AnomalyDetectionEnsemble:
             'feature_count': len(self.feature_names) if self.feature_names else 0,
             'features': self.feature_names
         }
-
-
-class AdaptiveBaseline:
-    """
-    Adaptive baseline calculation similar to Netdata AI.
-    Maintains rolling statistics and auto-adjusts thresholds.
-    """
-    
-    def __init__(self, window_size: int = 90):
-        self.window_size = window_size  # Days
-        self.baselines = {}
-    
-    def update(self, feature_name: str, values: pd.Series):
-        """Update baseline for a feature"""
-        
-        if feature_name not in self.baselines:
-            self.baselines[feature_name] = {
-                'history': [],
-                'stats': {}
-            }
-        
-        baseline = self.baselines[feature_name]
-        
-        # Add new values
-        baseline['history'].extend(values.tolist())
-        
-        # Keep only recent window
-        if len(baseline['history']) > self.window_size * 24:  # Assuming hourly data
-            baseline['history'] = baseline['history'][-self.window_size * 24:]
-        
-        # Recalculate statistics
-        data = pd.Series(baseline['history'])
-        
-        baseline['stats'] = {
-            'mean': data.mean(),
-            'std': data.std(),
-            'median': data.median(),
-            'p95': data.quantile(0.95),
-            'p99': data.quantile(0.99),
-            'min': data.min(),
-            'max': data.max()
-        }
-    
-    def is_anomaly(self, feature_name: str, value: float, sensitivity: float = 3.0) -> bool:
-        """Check if value is anomalous"""
-        
-        if feature_name not in self.baselines:
-            return False
-        
-        stats = self.baselines[feature_name]['stats']
-        
-        # Z-score method
-        if stats['std'] > 0:
-            z_score = abs((value - stats['mean']) / stats['std'])
-            if z_score > sensitivity:
-                return True
-        
-        # Percentile method
-        if value > stats['p99']:
-            return True
-        
-        return False
