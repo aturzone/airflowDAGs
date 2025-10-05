@@ -86,10 +86,10 @@ wait_for_service() {
 complete_cleanup() {
     print_status "Performing complete cleanup..."
     
-    # Kill processes on required ports
-    kill_port 9090  # New Airflow port
-    kill_port 5433  # New PostgreSQL port
-    kill_port 6380  # New Redis port
+    # Kill processes on required ports - FIXED PORTS
+    kill_port 9090  # Airflow webserver
+    kill_port 5435  # PostgreSQL - FIXED from 5433
+    kill_port 6380  # Redis
     
     # Stop and remove all containers
     docker-compose down -v --remove-orphans 2>/dev/null || true
@@ -149,7 +149,8 @@ main() {
     print_status "Starting PostgreSQL..."
     docker-compose up -d postgres
     
-    if ! wait_for_service "PostgreSQL" 5433 "postgres" 15; then
+    # FIXED: Changed port from 5433 to 5435
+    if ! wait_for_service "PostgreSQL" 5435 "postgres" 15; then
         print_error "PostgreSQL failed to start"
         exit 1
     fi
@@ -166,7 +167,7 @@ main() {
         docker-compose restart redis
         sleep 5
         
-        if ! wait_for_service "Redis" 6379 "redis" 10; then
+        if ! wait_for_service "Redis" 6380 "redis" 10; then
             print_error "Redis restart failed"
             exit 1
         fi
