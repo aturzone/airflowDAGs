@@ -42,6 +42,9 @@ help: ## Show this help message
 	@echo "$(CYAN)🤖 ANOMALY DETECTION:$(NC)"
 	@grep -E '^anomaly-.*:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-25s$(NC) %s\n", $$1, $$2}'
 	@echo ""
+	@echo "$(CYAN)🎯 ANOMALY SENSITIVITY:$(NC)"
+	@grep -E '^anomaly-(init-config|get-config|set-contamination|set-threshold|strict|moderate|permissive):.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-25s$(NC) %s\n", $$1, $$2}'
+	@echo ""
 	@echo "$(CYAN)📊 DASHBOARD & MONITORING:$(NC)"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep "DASHBOARD\|MONITOR\|LOGS\|STATUS" | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(YELLOW)%-25s$(NC) %s\n", $$1, $$2}'
 	@echo ""
@@ -473,3 +476,96 @@ version: ## Show version information
 	@echo "Airflow: $$($(DOCKER_COMPOSE) exec -T $(AIRFLOW_SERVICE) airflow version 2>/dev/null || echo 'Not running')"
 	@echo "Docker Compose: $$(docker-compose version --short)"
 	@echo "Docker: $$(docker --version | cut -d' ' -f3)"
+
+# ================================================================
+# 🎯 ANOMALY SENSITIVITY CONFIGURATION
+# ================================================================
+
+anomaly-init-config: ## Initialize anomaly configuration table
+	@echo "$(GREEN)🎯 Initializing anomaly configuration table...$(NC)"
+	@$(DOCKER_COMPOSE) exec $(POSTGRES_SERVICE) psql -U airflow -d airflow -c "\
+		CREATE TABLE IF NOT EXISTS anomaly_config ( \
+			key VARCHAR(50) PRIMARY KEY, \
+			value VARCHAR(100), \
+			description TEXT, \
+			updated_at TIMESTAMP DEFAULT NOW() \
+		);"
+	@$(DOCKER_COMPOSE) exec $(POSTGRES_SERVICE) psql -U airflow -d airflow -c "\
+		INSERT INTO anomaly_config (key, value, description) \
+		VALUES ('contamination', '0.05', 'Expected proportion of anomalies (0.01-0.10)') \
+		ON CONFLICT (key) DO NOTHING;"
+	@$(DOCKER_COMPOSE) exec $(POSTGRES_SERVICE) psql -U airflow -d airflow -c "\
+		INSERT INTO anomaly_config (key, value, description) \
+		VALUES ('score_threshold', '0.5', 'Minimum score to classify as anomaly (0.0-1.0)') \
+		ON CONFLICT (key) DO NOTHING;"
+	@echo "$(GREEN)✅ Anomaly configuration initialized!$(NC)"
+	@$(MAKE) anomaly-get-config
+
+anomaly-get-config: ## Show current anomaly detection configuration
+	@echo "$(CYAN)📊 Current Anomaly Detection Configuration:$(NC)"
+	@echo "$(BLUE)================================================$(NC)"
+	@$(DOCKER_COMPOSE) exec $(POSTGRES_SERVICE) psql -U airflow -d airflow -c "\
+		SELECT \
+			key, \
+			value, \
+			description, \
+			TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at \
+		FROM anomaly_config \
+		ORDER BY key;"
+	@echo ""
+	@echo "$(YELLOW)💡 Tip: Use 'make anomaly-strict', 'make anomaly-moderate', or 'make anomaly-permissive' for quick presets$(NC)"
+
+anomaly-set-contamination: ## Set contamination parameter (usage: make anomaly-set-contamination CONT=0.05)
+	@echo "$(GREEN)🎯 Setting contamination parameter to $(CONT)...$(NC)"
+	@if [ -z "$(CONT)" ]; then \
+		echo "$(RED)❌ Error: CONT parameter is required$(NC)"; \
+		echo "Usage: make anomaly-set-contamination CONT=0.05"; \
+		exit 1; \
+	fi
+	@$(DOCKER_COMPOSE) exec $(POSTGRES_SERVICE) psql -U airflow -d airflow -c "\
+		INSERT INTO anomaly_config (key, value, updated_at) \
+		VALUES ('contamination', '$(CONT)', NOW()) \
+		ON CONFLICT (key) DO UPDATE SET value='$(CONT)', updated_at=NOW();"
+	@echo "$(GREEN)✅ Contamination set to $(CONT)$(NC)"
+	@echo "$(YELLOW)⚠️  Run 'make anomaly-model-reset' to retrain with new settings$(NC)"
+	@echo "$(YELLOW)🔄 Then run 'make anomaly-trigger' to detect anomalies$(NC)"
+	@$(MAKE) anomaly-get-config
+
+anomaly-set-threshold: ## Set anomaly score threshold (usage: make anomaly-set-threshold THRESHOLD=0.7)
+	@echo "$(GREEN)🎯 Setting anomaly score threshold to $(THRESHOLD)...$(NC)"
+	@if [ -z "$(THRESHOLD)" ]; then \
+		echo "$(RED)❌ Error: THRESHOLD parameter is required$(NC)"; \
+		echo "Usage: make anomaly-set-threshold THRESHOLD=0.7"; \
+		exit 1; \
+	fi
+	@$(DOCKER_COMPOSE) exec $(POSTGRES_SERVICE) psql -U airflow -d airflow -c "\
+		INSERT INTO anomaly_config (key, value, updated_at) \
+		VALUES ('score_threshold', '$(THRESHOLD)', NOW()) \
+		ON CONFLICT (key) DO UPDATE SET value='$(THRESHOLD)', updated_at=NOW();"
+	@echo "$(GREEN)✅ Score threshold set to $(THRESHOLD)$(NC)"
+	@echo "$(YELLOW)🔄 Next DAG run will use new threshold$(NC)"
+	@$(MAKE) anomaly-get-config
+
+anomaly-strict: ## Set to STRICT mode (1-2% anomaly rate)
+	@echo "$(GREEN)🔒 Setting STRICT anomaly detection mode...$(NC)"
+	@echo "   Expected anomaly rate: 1-2%"
+	@$(MAKE) anomaly-set-contamination CONT=0.02
+	@echo ""
+	@echo "$(GREEN)✅ Strict mode activated!$(NC)"
+	@echo "$(YELLOW)⚠️  This will only catch the most extreme anomalies$(NC)"
+
+anomaly-moderate: ## Set to MODERATE mode (3-5% anomaly rate)
+	@echo "$(GREEN)⚖️  Setting MODERATE anomaly detection mode...$(NC)"
+	@echo "   Expected anomaly rate: 3-5%"
+	@$(MAKE) anomaly-set-contamination CONT=0.05
+	@echo ""
+	@echo "$(GREEN)✅ Moderate mode activated!$(NC)"
+	@echo "$(CYAN)📊 Balanced sensitivity for general monitoring$(NC)"
+
+anomaly-permissive: ## Set to PERMISSIVE mode (8-10% anomaly rate)
+	@echo "$(GREEN)🔓 Setting PERMISSIVE anomaly detection mode...$(NC)"
+	@echo "   Expected anomaly rate: 8-10%"
+	@$(MAKE) anomaly-set-contamination CONT=0.10
+	@echo ""
+	@echo "$(GREEN)✅ Permissive mode activated!$(NC)"
+	@echo "$(YELLOW)⚠️  This will catch many edge cases but may be noisy$(NC)"
