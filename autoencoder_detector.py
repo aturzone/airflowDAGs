@@ -2,12 +2,13 @@
 Autoencoder Anomaly Detector
 Neural network-based anomaly detection using reconstruction error
 """
+from __future__ import annotations  # Enable postponed evaluation of annotations
 import pandas as pd
 import numpy as np
 import json
 import os
 from datetime import datetime
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, TYPE_CHECKING
 
 # TensorFlow imports
 try:
@@ -19,8 +20,12 @@ try:
 except ImportError:
     print("⚠️  TensorFlow not available. Autoencoder will not work.")
     TF_AVAILABLE = False
-    # Define dummy classes to avoid NameError
-    Model = object
+    # Define dummy classes to avoid NameError in type hints
+    if TYPE_CHECKING:
+        from tensorflow.keras import Model
+    else:
+        Model = object
+        keras = object
 
 
 class AutoencoderDetector:
@@ -67,7 +72,7 @@ class AutoencoderDetector:
         self.training_samples = 0
         self.training_history = None
     
-    def _build_model(self, input_dim: int):
+    def _build_model(self, input_dim: int) -> Model:
         """
         Build autoencoder architecture
         
