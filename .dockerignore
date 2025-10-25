@@ -1,0 +1,47 @@
+# Logs and temporary files
+logs/
+*.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Git
+.git/
+.gitignore
+
+# Environment variables
+.env
+.env.local
+
+# Docker and compose files (not needed in image)
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# DAGs and plugins (mounted via volumes)
+dags/
+plugins/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation and notes
+*.md
+docs/
+
+# Test files
+tests/
+pytest.ini
+.pytest_cache/
