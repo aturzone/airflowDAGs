@@ -1,6 +1,6 @@
 {
   "model_type": "autoencoder",
-  "threshold": 0.32050827015939654,
+  "threshold": 0.3517064600900511,
   "feature_names": [
     "amount",
     "fee",
@@ -38,8 +38,8 @@
     "fee_rolling_mean",
     "fee_rolling_std"
   ],
-  "training_date": "2025-10-25T09:37:15.658310",
-  "training_samples": 5665,
+  "training_date": "2025-10-30T13:02:38.733619",
+  "training_samples": 5765,
   "architecture": {
     "encoding_dim": 10,
     "hidden_layers": [

@@ -1,6 +1,6 @@
 {
-  "model_type": "autoencoder",
-  "threshold": 0.3262032163500957,
+  "model_type": "isolation_forest",
+  "threshold": -0.5696854705727227,
   "feature_names": [
     "amount",
     "fee",
@@ -38,15 +38,13 @@
     "fee_rolling_mean",
     "fee_rolling_std"
   ],
-  "training_date": "2025-10-30T12:22:00.248942",
+  "training_date": "2025-10-30T13:02:21.844302",
   "training_samples": 5765,
-  "architecture": {
-    "encoding_dim": 10,
-    "hidden_layers": [
-      30,
-      20
-    ],
-    "learning_rate": 0.001
+  "params": {
+    "n_estimators": 100,
+    "contamination": 0.01,
+    "max_samples": "auto",
+    "random_state": 42
   },
   "version": "1.0"
 }

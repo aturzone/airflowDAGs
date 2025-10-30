@@ -1,5 +1,5 @@
 """
-Ensemble Anomaly Detection DAG
+Ensemble Anomaly Detection DAG - FIXED VERSION
 Runs hourly to detect anomalies in new crypto transactions
 """
 from airflow import DAG
@@ -88,37 +88,40 @@ def extract_new_transactions(**context):
     
     print(f"✅ Extracted {len(df)} new transactions")
     
-    if len(df) == 0:
-        print("⚠️  No new transactions found")
-        # Push empty flag
-        ti = context['ti']
-        ti.xcom_push(key='has_data', value=False)
-        return 'no_transactions'
-    
-    print(f"   Users: {df['user_id'].nunique()}")
-    print(f"   Types: {df['transaction_type'].value_counts().to_dict()}")
-    print(f"   Currencies: {df['currency'].value_counts().to_dict()}")
-    
-    # Generate run ID
-    run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-    
     # Push to XCom
     ti = context['ti']
-    ti.xcom_push(key='transactions', value=df.to_json(orient='split', date_format='iso'))
-    ti.xcom_push(key='n_transactions', value=len(df))
-    ti.xcom_push(key='run_id', value=run_id)
-    ti.xcom_push(key='has_data', value=True)
     
-    print(f"✅ Task completed: Run ID = {run_id}")
-    
-    return 'engineer_features'
+    if len(df) == 0:
+        print("⚠️  No new transactions found")
+        ti.xcom_push(key='has_data', value=False)
+        ti.xcom_push(key='n_transactions', value=0)
+    else:
+        print(f"   Users: {df['user_id'].nunique()}")
+        print(f"   Types: {df['transaction_type'].value_counts().to_dict()}")
+        print(f"   Currencies: {df['currency'].value_counts().to_dict()}")
+        
+        # Generate run ID
+        run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        
+        ti.xcom_push(key='transactions', value=df.to_json(orient='split', date_format='iso'))
+        ti.xcom_push(key='n_transactions', value=len(df))
+        ti.xcom_push(key='run_id', value=run_id)
+        ti.xcom_push(key='has_data', value=True)
+        
+        print(f"✅ Task completed: Run ID = {run_id}")
 
 
 def check_has_data(**context):
     """Branch to check if we have data"""
     ti = context['ti']
     has_data = ti.xcom_pull(key='has_data', task_ids='extract_new_transactions')
-    return 'engineer_features' if has_data else 'no_transactions'
+    
+    if has_data:
+        print("✅ Data found - proceeding with feature engineering")
+        return 'engineer_features'
+    else:
+        print("ℹ️  No data - skipping processing")
+        return 'no_transactions'
 
 
 def engineer_features(**context):
@@ -129,6 +132,11 @@ def engineer_features(**context):
     
     ti = context['ti']
     df_json = ti.xcom_pull(key='transactions', task_ids='extract_new_transactions')
+    
+    # Safety check
+    if df_json is None:
+        raise ValueError("No transaction data found in XCom")
+    
     df = pd.read_json(df_json, orient='split')
     
     # Get client for historical data
@@ -462,10 +470,16 @@ with DAG(
     tags=['production', 'ensemble', 'anomaly-detection'],
 ) as dag:
     
-    # Task 1: Extract transactions (with branching)
+    # Task 1: Extract transactions
     task_extract = PythonOperator(
         task_id='extract_new_transactions',
         python_callable=extract_new_transactions,
+    )
+    
+    # Task 1b: Branch based on data availability
+    task_check_data = BranchPythonOperator(
+        task_id='check_has_data',
+        python_callable=check_has_data,
     )
     
     # Empty task for no data case
@@ -520,8 +534,9 @@ with DAG(
         task_id='no_alerts',
     )
     
-    # Dependencies
-    task_extract >> [task_features, task_no_data]
+    # Dependencies - FIXED BRANCHING
+    task_extract >> task_check_data
+    task_check_data >> [task_features, task_no_data]
     task_features >> task_load >> task_predict
     task_predict >> task_store >> task_metrics >> task_check_alerts
     task_check_alerts >> [task_send_alerts, task_no_alerts]
