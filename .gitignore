@@ -11,16 +11,14 @@ __pycache__/
 env/
 venv/
 ENV/
-env.bak/
-venv.bak/
 
-# Environment variables and secrets
+# Environment and secrets
 .env
 .env.local
 *.pem
 *.key
 
-# Docker volumes data
+# Docker volumes
 postgres_data/
 clickhouse_data/
 
@@ -41,12 +39,17 @@ airflow.db
 airflow-webserver.pid
 standalone_admin_password.txt
 
-# ML Models (optional - depending on your strategy)
-# models/*.pkl
-# models/*.joblib
+# ML Models (optional - commit small ones, ignore large)
+models/*.pkl
+models/*.keras
+models/*.h5
+models/*.joblib
+!models/.gitkeep
 
-# Temporary files
+# Temporary and backup files
 *.tmp
+*.backup
+*~
 .cache/
 
 # Jupyter
@@ -57,3 +60,8 @@ standalone_admin_password.txt
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/

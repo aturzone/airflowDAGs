@@ -1,6 +1,7 @@
 """
-Autoencoder Anomaly Detector
+Autoencoder Anomaly Detector - FIXED VERSION
 Neural network-based anomaly detection using reconstruction error
+Fixed: Keras save/load compatibility issues
 """
 import pandas as pd
 import numpy as np
@@ -66,9 +67,11 @@ class AutoencoderDetector:
         decoded = layers.Dense(input_dim, activation='linear', name='output')(decoded)
         
         autoencoder = Model(inputs=input_layer, outputs=decoded, name='autoencoder')
+        
+        # FIX: Use full string 'mean_squared_error' instead of 'mse'
         autoencoder.compile(
             optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),
-            loss='mse',
+            loss='mean_squared_error',  # FIXED: was 'mse'
             metrics=['mae']
         )
         
@@ -142,15 +145,21 @@ class AutoencoderDetector:
         return normalized_errors, predictions
     
     def save(self, model_path: str, metadata_path: Optional[str] = None):
-        """Save model"""
+        """Save model - FIXED VERSION"""
         if not self.is_trained:
             raise ValueError("Model not trained")
         
-        self.model.save(model_path)
+        # FIX: Save in Keras 3 format (not HDF5)
+        # Use .keras extension instead of .h5
+        if model_path.endswith('.h5'):
+            model_path = model_path.replace('.h5', '.keras')
+            print(f"⚠️  Converted path from .h5 to .keras format")
+        
+        self.model.save(model_path, save_format='keras')
         print(f"💾 Model saved: {model_path}")
         
         if metadata_path is None:
-            metadata_path = model_path.replace('.h5', '_metadata.json').replace('.keras', '_metadata.json')
+            metadata_path = model_path.replace('.keras', '_metadata.json').replace('.h5', '_metadata.json')
         
         metadata = {
             'model_type': 'autoencoder',
@@ -172,12 +181,32 @@ class AutoencoderDetector:
         print(f"📋 Metadata saved: {metadata_path}")
     
     def load(self, model_path: str, metadata_path: Optional[str] = None):
-        """Load model"""
-        self.model = keras.models.load_model(model_path)
+        """Load model - FIXED VERSION"""
+        
+        # FIX: Handle both .h5 and .keras files
+        if model_path.endswith('.h5'):
+            print(f"⚠️  Loading .h5 file with custom_objects for compatibility")
+            # Define custom objects for backward compatibility
+            custom_objects = {
+                'mse': keras.losses.MeanSquaredError(),
+                'mean_squared_error': keras.losses.MeanSquaredError()
+            }
+            self.model = keras.models.load_model(model_path, custom_objects=custom_objects, compile=False)
+            
+            # Recompile with proper loss
+            self.model.compile(
+                optimizer=keras.optimizers.Adam(learning_rate=0.001),
+                loss='mean_squared_error',
+                metrics=['mae']
+            )
+        else:
+            # .keras format - should load fine
+            self.model = keras.models.load_model(model_path)
+        
         print(f"📖 Model loaded: {model_path}")
         
         if metadata_path is None:
-            metadata_path = model_path.replace('.h5', '_metadata.json').replace('.keras', '_metadata.json')
+            metadata_path = model_path.replace('.keras', '_metadata.json').replace('.h5', '_metadata.json')
         
         if os.path.exists(metadata_path):
             with open(metadata_path, 'r') as f:
@@ -200,4 +229,4 @@ class AutoencoderDetector:
 
 
 if __name__ == "__main__":
-    print("Autoencoder Detector Module")
+    print("Autoencoder Detector Module - Fixed Version")
