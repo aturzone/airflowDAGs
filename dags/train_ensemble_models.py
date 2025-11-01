@@ -208,7 +208,7 @@ def train_autoencoder(**context):
     
     # Save model
     model_version = datetime.now().strftime('%Y%m%d_%H%M%S')
-    model_path = os.path.join(MODELS_DIR, f'autoencoder_{model_version}.h5')
+    model_path = os.path.join(MODELS_DIR, f'autoencoder_{model_version}.keras')
     detector.save(model_path)
     
     # Push metrics to XCom

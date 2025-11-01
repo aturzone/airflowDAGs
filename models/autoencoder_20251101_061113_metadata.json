@@ -1,0 +1,52 @@
+{
+  "model_type": "autoencoder",
+  "threshold": 0.19959176157703784,
+  "feature_names": [
+    "amount",
+    "fee",
+    "hour_of_day",
+    "day_of_week",
+    "amount_log",
+    "fee_log",
+    "fee_ratio",
+    "hour_sin",
+    "hour_cos",
+    "day_sin",
+    "day_cos",
+    "is_weekend",
+    "is_night",
+    "is_business_hours",
+    "user_total_tx",
+    "user_avg_amount",
+    "user_std_amount",
+    "user_max_amount",
+    "user_total_volume",
+    "user_currencies",
+    "user_tx_types",
+    "user_account_age_days",
+    "user_days_since_last_tx",
+    "amount_vs_user_avg",
+    "amount_vs_user_max",
+    "amount_zscore",
+    "has_from_address",
+    "has_to_address",
+    "has_both_addresses",
+    "from_address_len",
+    "to_address_len",
+    "amount_rolling_mean",
+    "amount_rolling_std",
+    "fee_rolling_mean",
+    "fee_rolling_std"
+  ],
+  "training_date": "2025-11-01T06:11:13.867135",
+  "training_samples": 9760,
+  "architecture": {
+    "encoding_dim": 10,
+    "hidden_layers": [
+      30,
+      20
+    ],
+    "learning_rate": 0.001
+  },
+  "version": "1.0"
+}
