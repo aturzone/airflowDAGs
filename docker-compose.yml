@@ -108,6 +108,34 @@ services:
       airflow-init:
         condition: service_completed_successfully
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: anomalyguard_dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./dashboard:/app/dashboard
+      - ./config:/opt/airflow/config
+      - ./models:/opt/airflow/models
+      - ./dags:/opt/airflow/dags
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - airflow_network
+    depends_on:
+      - clickhouse
+      - webserver
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: streamlit run /app/dashboard/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true
+
 volumes:
   postgres_data:
     driver: local
